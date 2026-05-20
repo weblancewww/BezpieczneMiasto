@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Datasource is configured in prisma.config.ts (Prisma 7)
+datasource db {
+  provider = "mysql"
+}
+
+enum OrganizationType {
+  POWIAT
+  GMINA
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+}
+
+enum ReportStatus {
+  NEW
+  ANALYSIS
+  IN_PROGRESS
+  RESOLVED
+}
+
+// Organizations can have parents (hierarchical structure)
+model Organization {
+  id               String         @id @default(cuid())
+  name             String
+  slug             String         @unique
+  type             OrganizationType
+  description      String?        @db.Text
+  adminArea        String?        @db.Text  // Comma-separated territory names (gmina/powiat) for geo-assignment
+  parentId         String?        // Self-relation for hierarchy
+  parent           Organization?  @relation("ParentOrg", fields: [parentId], references: [id], onDelete: SetNull)
+  children         Organization[] @relation("ParentOrg")
+  users            User[]
+  locations        Location[]
+  reports          Report[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([parentId])
+}
+
+// Users with roles per organization
+model User {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  password         String
+  name             String
+  role             UserRole       @default(MODERATOR)
+  organizationId   String?
+  organization     Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  statusHistories  StatusHistory[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+// Locations (QR code places) - assigned to organizations
+model Location {
+  id               String         @id @default(cuid())
+  name             String
+  description      String?        @db.Text
+  address          String
+  latitude         Float
+  longitude        Float
+  qrToken          String         @unique @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reports          Report[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([qrToken])
+}
+
+// Reports submitted via QR code
+model Report {
+  id               String         @id @default(cuid())
+  locationId       String?
+  location         Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reportLatitude   Float?
+  reportLongitude  Float?
+  reportAddress    String?
+  reportPlaceName  String?
+  
+  // Reporter info
+  reporterName     String
+  reporterEmail    String
+  reporterPhone    String
+  
+  // Issue details
+  description      String         @db.Text
+  status           ReportStatus   @default(NEW)
+  
+  // Relations
+  photos           ReportPhoto[]
+  statusHistories  StatusHistory[]
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([locationId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Photos attached to reports
+model ReportPhoto {
+  id               String         @id @default(cuid())
+  reportId         String
+  report           Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // File info
+  filename         String
+  path             String         // Relative path: /uploads/reportId/filename
+  size             Int            // Bytes
+  
+  createdAt        DateTime       @default(now())
+
+  @@index([reportId])
+}
+
+// Status change history for audit trail
+model StatusHistory {
+  id               String         @id @default(cuid())
+  reportId         String
+  report           Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  status           ReportStatus
+  note             String?        @db.Text
+  
+  changedById      String
+  changedBy        User           @relation(fields: [changedById], references: [id], onDelete: Cascade)
+  
+  createdAt        DateTime       @default(now())
+
+  @@index([reportId])
+  @@index([changedById])
+}
