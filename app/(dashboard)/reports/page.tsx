@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { cn, reportStatusClass, reportStatusLabel, type ReportStatus } from "@/lib/utils";
+import { reportStatusLabel, type ReportStatus } from "@/lib/utils";
 
 type ReportRow = {
   id: string;
@@ -49,8 +49,6 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | ReportStatus>("ALL");
-  const [statusDrafts, setStatusDrafts] = useState<Record<string, ReportStatus>>({});
-  const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingReportId, setSavingReportId] = useState<string | null>(null);
 
   async function fetchReportsList() {
@@ -68,9 +66,6 @@ export default function ReportsPage() {
       setIsLoading(true);
       const data = await fetchReportsList();
       setReports(data);
-      setStatusDrafts(
-        Object.fromEntries(data.map((report) => [report.id, report.status])) as Record<string, ReportStatus>
-      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Błąd ładowania";
       toast.error(message);
@@ -91,9 +86,6 @@ export default function ReportsPage() {
         }
 
         setReports(data);
-        setStatusDrafts(
-          Object.fromEntries(data.map((report) => [report.id, report.status])) as Record<string, ReportStatus>
-        );
       } catch (error) {
         if (!active) {
           return;
@@ -139,13 +131,18 @@ export default function ReportsPage() {
     });
   }, [query, reports, statusFilter]);
 
-  async function saveStatus(reportId: string) {
-    const status = statusDrafts[reportId];
+  async function saveStatus(reportId: string, status: ReportStatus) {
+    const previousStatus = reports.find((report) => report.id === reportId)?.status;
 
-    if (!status) {
-      toast.error("Wybierz status");
+    if (!previousStatus || previousStatus === status) {
       return;
     }
+
+    setReports((current) =>
+      current.map((report) =>
+        report.id === reportId ? { ...report, status } : report
+      )
+    );
 
     try {
       setSavingReportId(reportId);
@@ -154,7 +151,7 @@ export default function ReportsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status,
-          note: (notes[reportId] || "").trim(),
+          note: "",
         }),
       });
 
@@ -164,15 +161,13 @@ export default function ReportsPage() {
         throw new Error(result.error || "Nie udało się zapisać statusu");
       }
 
-      setReports((current) =>
-        current.map((report) =>
-          report.id === reportId ? { ...report, status } : report
-        )
-      );
-
-      setNotes((current) => ({ ...current, [reportId]: "" }));
       toast.success("Status zgłoszenia został zaktualizowany");
     } catch (error) {
+      setReports((current) =>
+        current.map((report) =>
+          report.id === reportId ? { ...report, status: previousStatus } : report
+        )
+      );
       const message = error instanceof Error ? error.message : "Błąd zapisu statusu";
       toast.error(message);
     } finally {
@@ -227,8 +222,7 @@ export default function ReportsPage() {
                   <TableHead>Zgłaszający</TableHead>
                   <TableHead>Opis</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Notatka</TableHead>
-                  <TableHead>Akcje</TableHead>
+                  <TableHead>Szczegóły</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -252,19 +246,14 @@ export default function ReportsPage() {
                     <TableCell className="max-w-xs truncate" title={report.description}>
                       {report.description}
                     </TableCell>
-                    <TableCell>
-                      <div className={cn(reportStatusClass(statusDrafts[report.id] || report.status), "mb-2") }>
-                        {reportStatusLabel[statusDrafts[report.id] || report.status]}
-                      </div>
+                    <TableCell className="space-y-2">
                       <select
-                        value={statusDrafts[report.id] || report.status}
-                        onChange={(event) =>
-                          setStatusDrafts((current) => ({
-                            ...current,
-                            [report.id]: event.target.value as ReportStatus,
-                          }))
-                        }
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        value={report.status}
+                        onChange={(event) => {
+                          void saveStatus(report.id, event.target.value as ReportStatus);
+                        }}
+                        className="h-11 min-w-[220px] w-full rounded-md border border-input bg-background px-3 text-base"
+                        disabled={savingReportId === report.id}
                       >
                         {statusOptions.map((status) => (
                           <option key={status} value={status}>
@@ -272,31 +261,14 @@ export default function ReportsPage() {
                           </option>
                         ))}
                       </select>
+                      {savingReportId === report.id ? (
+                        <p className="text-xs text-muted-foreground">Zapisywanie...</p>
+                      ) : null}
                     </TableCell>
                     <TableCell>
-                      <Input
-                        value={notes[report.id] || ""}
-                        onChange={(event) =>
-                          setNotes((current) => ({
-                            ...current,
-                            [report.id]: event.target.value,
-                          }))
-                        }
-                        placeholder="Notatka do zmiany"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => saveStatus(report.id)}
-                          disabled={savingReportId === report.id}
-                        >
-                          {savingReportId === report.id ? "Zapisywanie..." : "Zapisz"}
-                        </Button>
-                        <Link href={`/reports/${report.id}`}>
-                          <Button variant="outline">Szczegóły</Button>
-                        </Link>
-                      </div>
+                      <Link href={`/reports/${report.id}`}>
+                        <Button variant="outline">Szczegóły</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
