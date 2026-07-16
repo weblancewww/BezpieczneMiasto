@@ -8,6 +8,7 @@ services:
             MARIADB_DATABASE: ${MYSQL_DATABASE}
             MARIADB_USER: ${MYSQL_USER}
             MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+            SHADOW_DATABASE: shadow_${MYSQL_DATABASE}
         healthcheck:
             test:
                 [
@@ -19,6 +20,7 @@ services:
             retries: 20
         volumes:
             - ${MARIADB_DATA_DIR:-./.docker-data/bezpieczne-miasto/mariadb}:/var/lib/mysql
+            - ./docker/mariadb-init:/docker-entrypoint-initdb.d:ro
 
     app:
         build:
@@ -45,5 +47,6 @@ services:
             MYSQL_DATABASE: ${MYSQL_DATABASE}
             MYSQL_USER: ${MYSQL_USER}
             MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            SHADOW_DATABASE: shadow_${MYSQL_DATABASE}
         volumes:
             - ${UPLOADS_DATA_DIR:-./.docker-data/bezpieczne-miasto/uploads}:/app/public/uploads

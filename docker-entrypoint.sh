@@ -8,7 +8,9 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 if [ -z "${SHADOW_DATABASE_URL:-}" ]; then
-  export SHADOW_DATABASE_URL="${DATABASE_URL:-}"
+  if [ -n "${SHADOW_DATABASE:-}" ] && [ -n "${MYSQL_USER:-}" ] && [ -n "${MYSQL_PASSWORD:-}" ]; then
+    export SHADOW_DATABASE_URL="$(node -e 'const user = process.env.MYSQL_USER || ""; const password = process.env.MYSQL_PASSWORD || ""; const database = process.env.SHADOW_DATABASE || ""; process.stdout.write(`mysql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@db:3306/${encodeURIComponent(database)}`)')"
+  fi
 fi
 
 if [ -n "${DATABASE_URL:-}" ]; then
