@@ -16,9 +16,12 @@ fi
 if [ -n "${DATABASE_URL:-}" ]; then
   npm run db:deploy
 
-  SHOULD_SEED="$(node -e 'const mariadb = require("mariadb"); const databaseUrl = (process.env.DATABASE_URL || "").replace(/^mysql:\/\//, "mariadb://"); (async () => { let connection; try { connection = await mariadb.createConnection(databaseUrl); const rows = await connection.query("SELECT COUNT(*) AS count FROM User"); const count = Number(rows[0]?.count ?? 0); process.stdout.write(count === 0 ? "yes" : "no"); } catch (error) { console.error(error); process.exit(1); } finally { if (connection) { await connection.end(); } } })();')"
+  SEED_STATE="$(node -e 'const mariadb = require("mariadb"); const databaseUrl = (process.env.DATABASE_URL || "").replace(/^mysql:\/\//, "mariadb://"); (async () => { let connection; try { connection = await mariadb.createConnection(databaseUrl); const rows = await connection.query("SHOW TABLES LIKE \"User\""); if (!Array.isArray(rows) || rows.length === 0) { process.stdout.write("missing-table"); return; } const countRows = await connection.query("SELECT COUNT(*) AS count FROM User"); const count = Number(countRows[0]?.count ?? 0); process.stdout.write(count === 0 ? "empty" : "ready"); } catch (error) { console.error(error); process.exit(1); } finally { if (connection) { await connection.end(); } } })();')"
 
-  if [ "$SHOULD_SEED" = "yes" ]; then
+  if [ "$SEED_STATE" = "missing-table" ]; then
+    npm run db:push
+    npm run db:seed
+  elif [ "$SEED_STATE" = "empty" ]; then
     npm run db:seed
   fi
 fi
