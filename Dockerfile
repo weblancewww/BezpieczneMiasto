@@ -13,6 +13,11 @@ RUN npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production
+ARG MYSQL_DATABASE
+ARG MYSQL_USER
+ARG MYSQL_PASSWORD
+ENV DATABASE_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+ENV SHADOW_DATABASE_URL=mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/node_modules ./node_modules
@@ -20,4 +25,4 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 EXPOSE 3000
-CMD ["sh", "-c", "export DATABASE_URL=${DATABASE_URL:-mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}}; export SHADOW_DATABASE_URL=${SHADOW_DATABASE_URL:-$DATABASE_URL}; npm run db:deploy && npm run start"]
+CMD ["sh", "-c", "npm run db:deploy && npm run start"]
