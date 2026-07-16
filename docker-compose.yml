@@ -1,44 +1,49 @@
 services:
-  db:
-    image: mariadb:11.4
-    container_name: bezpieczne-miasto-db
-    restart: unless-stopped
-    environment:
-      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MARIADB_DATABASE: ${MYSQL_DATABASE}
-      MARIADB_USER: ${MYSQL_USER}
-      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$${MARIADB_USER} -p$${MARIADB_PASSWORD} --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-    volumes:
-      - ${MARIADB_DATA_DIR:-./.docker-data/bezpieczne-miasto/mariadb}:/var/lib/mysql
+    db:
+        image: mariadb:11.4
+        container_name: bezpieczne-miasto-db
+        restart: unless-stopped
+        environment:
+            MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MARIADB_DATABASE: ${MYSQL_DATABASE}
+            MARIADB_USER: ${MYSQL_USER}
+            MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "mariadb-admin ping -h 127.0.0.1 -u$${MARIADB_USER} -p$${MARIADB_PASSWORD} --silent",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 20
+        volumes:
+            - ${MARIADB_DATA_DIR:-./.docker-data/bezpieczne-miasto/mariadb}:/var/lib/mysql
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: bezpieczne-miasto-app
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      AUTH_TRUST_HOST: "true"
-      NEXTAUTH_URL: ${NEXTAUTH_URL}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM: ${SMTP_FROM}
-      DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
-      SHADOW_DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
-    volumes:
-      - ${UPLOADS_DATA_DIR:-./.docker-data/bezpieczne-miasto/uploads}:/app/public/uploads
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: bezpieczne-miasto-app
+        restart: unless-stopped
+        depends_on:
+            db:
+                condition: service_healthy
+        ports:
+            - "3000:3000"
+        environment:
+            NODE_ENV: production
+            AUTH_TRUST_HOST: "true"
+            NEXTAUTH_URL: ${NEXTAUTH_URL}
+            NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+            NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+            SMTP_HOST: ${SMTP_HOST}
+            SMTP_PORT: ${SMTP_PORT}
+            SMTP_USER: ${SMTP_USER}
+            SMTP_PASSWORD: ${SMTP_PASSWORD}
+            SMTP_FROM: ${SMTP_FROM}
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+        volumes:
+            - ${UPLOADS_DATA_DIR:-./.docker-data/bezpieczne-miasto/uploads}:/app/public/uploads
