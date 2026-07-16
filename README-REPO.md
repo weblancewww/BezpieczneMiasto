@@ -56,6 +56,15 @@ Jeśli chcesz wrzucić repo na GitHub:
 2. Buduje i uruchamia aplikację Next.js w kontenerze `app`.
 3. Przy starcie aplikacji wykonuje migracje Prisma (`npm run db:deploy`).
 4. Zachowuje dane bazy i uploady w trwałych wolumenach Docker.
+5. Sama komenda `docker compose` nie pobiera repo z GitHuba. Repo pobiera Coolify albo robisz `git clone`, a compose uruchamia już lokalny checkout.
+
+### Unikalne katalogi danych
+
+1. Domyślnie używane są ścieżki:
+	- `./.docker-data/bezpieczne-miasto/mariadb`
+	- `./.docker-data/bezpieczne-miasto/uploads`
+2. Możesz je nadpisać zmiennymi `MARIADB_DATA_DIR` i `UPLOADS_DATA_DIR` w `.env.docker`.
+3. Dzięki temu dane są trzymane w jasno nazwanych, oddzielnych katalogach.
 
 ### Pierwsze seedowanie danych (opcjonalnie)
 

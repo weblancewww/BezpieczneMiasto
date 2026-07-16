@@ -14,7 +14,7 @@ services:
       timeout: 5s
       retries: 20
     volumes:
-      - db_data:/var/lib/mysql
+      - ${MARIADB_DATA_DIR:-./.docker-data/bezpieczne-miasto/mariadb}:/var/lib/mysql
 
   app:
     build:
@@ -41,8 +41,4 @@ services:
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
       SHADOW_DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
     volumes:
-      - uploads_data:/app/public/uploads
-
-volumes:
-  db_data:
-  uploads_data:
+      - ${UPLOADS_DATA_DIR:-./.docker-data/bezpieczne-miasto/uploads}:/app/public/uploads
