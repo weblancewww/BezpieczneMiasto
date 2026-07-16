@@ -41,6 +41,26 @@ Jeśli chcesz wrzucić repo na GitHub:
 8. Dodaj Persistent Volume mapowany do ścieżki `/app/public/uploads`.
 9. Wykonaj pierwszy deploy.
 
+## Docker Compose (lokalnie lub na VPS)
+
+1. Skopiuj `.env.docker.example` do `.env.docker` i ustaw własne wartości.
+2. Uruchom stack:
+	- `docker compose --env-file .env.docker up -d --build`
+3. Aplikacja będzie dostępna pod `http://localhost:3000`.
+4. Zatrzymanie stacka:
+	- `docker compose --env-file .env.docker down`
+
+### Co robi ten setup
+
+1. Uruchamia MariaDB w kontenerze `db`.
+2. Buduje i uruchamia aplikację Next.js w kontenerze `app`.
+3. Przy starcie aplikacji wykonuje migracje Prisma (`npm run db:deploy`).
+4. Zachowuje dane bazy i uploady w trwałych wolumenach Docker.
+
+### Pierwsze seedowanie danych (opcjonalnie)
+
+1. `docker compose --env-file .env.docker exec app npm run db:seed`
+
 ## Uwagi bezpieczeństwa
 
 1. Nie trzymaj prawdziwych sekretów w `.env` i `.env.local` w repo.
