@@ -11,4 +11,14 @@ if [ -z "${SHADOW_DATABASE_URL:-}" ]; then
   export SHADOW_DATABASE_URL="${DATABASE_URL:-}"
 fi
 
+if [ -n "${DATABASE_URL:-}" ]; then
+  npm run db:deploy
+
+  SHOULD_SEED="$(node -e 'const mariadb = require("mariadb"); const databaseUrl = (process.env.DATABASE_URL || "").replace(/^mysql:\/\//, "mariadb://"); (async () => { let connection; try { connection = await mariadb.createConnection(databaseUrl); const rows = await connection.query("SELECT COUNT(*) AS count FROM User"); const count = Number(rows[0]?.count ?? 0); process.stdout.write(count === 0 ? "yes" : "no"); } catch (error) { console.error(error); process.exit(1); } finally { if (connection) { await connection.end(); } } })();')"
+
+  if [ "$SHOULD_SEED" = "yes" ]; then
+    npm run db:seed
+  fi
+fi
+
 exec "$@"
