@@ -10,7 +10,7 @@
 		"db:push": "prisma db push",
 		"db:migrate": "prisma migrate dev",
 		"db:deploy": "prisma migrate deploy",
-		"db:seed": "ts-node --project tsconfig.json prisma/seed.ts"
+		"db:seed": "ts-node-esm --project tsconfig.json prisma/seed.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.4.1",
@@ -55,6 +55,6 @@
 		"typescript": "^5"
 	},
 	"prisma": {
-		"seed": "ts-node --project tsconfig.json prisma/seed.ts"
+		"seed": "ts-node-esm --project tsconfig.json prisma/seed.ts"
 	}
 }
