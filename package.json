@@ -10,7 +10,7 @@
 		"db:push": "prisma db push",
 		"db:migrate": "prisma migrate dev",
 		"db:deploy": "prisma migrate deploy",
-		"db:seed": "ts-node-esm --project tsconfig.json prisma/seed.ts"
+		"db:seed": "tsx prisma/seed.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.4.1",
@@ -52,9 +52,10 @@
 		"eslint-config-next": "16.2.6",
 		"tailwindcss": "^4",
 		"ts-node": "^10.9.2",
+		"tsx": "^4.23.1",
 		"typescript": "^5"
 	},
 	"prisma": {
-		"seed": "ts-node-esm --project tsconfig.json prisma/seed.ts"
+		"seed": "tsx prisma/seed.ts"
 	}
 }
