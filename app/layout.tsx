@@ -1,31 +1,19 @@
 import type { Metadata } from "next";
-import { Merriweather, Montserrat, Roboto_Mono } from "next/font/google";
+import { Work_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppSessionProvider } from "@/components/providers/session-provider";
-import { AppThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
 
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
+const workSans = Work_Sans({
+  variable: "--font-work-sans",
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-const merriweather = Merriweather({
-  variable: "--font-merriweather",
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "700"],
-});
-
-const robotoMono = Roboto_Mono({
-  variable: "--font-roboto-mono",
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Bezpieczne Miasto",
-  description: "Aplikacja do zgłaszania usterek w przestrzeni publicznej",
+  title: "Bezpieczne Miasto — Panel Operacyjny",
+  description: "System zgłaszania i obsługi usterek w przestrzeni publicznej",
 };
 
 export default function RootLayout({
@@ -34,12 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pl" suppressHydrationWarning className={`${montserrat.variable} ${merriweather.variable} ${robotoMono.variable} h-full`}>
-      <body className="min-h-full flex flex-col font-sans antialiased text-foreground">
-        <AppThemeProvider>
-          <AppSessionProvider>{children}</AppSessionProvider>
-        </AppThemeProvider>
-        <Toaster />
+    <html lang="pl" suppressHydrationWarning className={`${workSans.variable} h-full`}>
+      <body className="min-h-full font-sans antialiased">
+        <AppSessionProvider>{children}</AppSessionProvider>
+        <Toaster theme="dark" position="bottom-right" richColors closeButton />
       </body>
     </html>
   );

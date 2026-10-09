@@ -1,10 +1,25 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, Camera, MapPin } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { StatusForm } from "@/components/reports/status-form";
+import type { ReportStatus } from "@/lib/utils";
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "Nowe",
+  ANALYSIS: "Podjęte do analizy",
+  IN_PROGRESS: "W trakcie rozwiązywania",
+  RESOLVED: "Rozwiązane",
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  NEW: "new",
+  ANALYSIS: "analysis",
+  IN_PROGRESS: "progress",
+  RESOLVED: "resolved",
+};
 
 function formatDate(date: Date) {
   return new Date(date).toLocaleString("pl-PL", {
@@ -16,16 +31,17 @@ function formatDate(date: Date) {
   });
 }
 
-const statusLabels: Record<string, string> = {
-  NEW: "Nowe",
-  ANALYSIS: "Podjęte do analizy",
-  IN_PROGRESS: "W trakcie rozwiązywania",
-  RESOLVED: "Rozwiązane",
-};
+function formatDay(date: Date) {
+  return new Date(date).toLocaleDateString("pl-PL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
-export default async function ReportDetailsPage(
-  props: { params: Promise<{ reportId: string }> }
-) {
+export default async function ReportDetailsPage(props: {
+  params: Promise<{ reportId: string }>;
+}) {
   const session = await auth();
 
   if (!session?.user?.id || !session.user.organizationId) {
@@ -36,22 +52,12 @@ export default async function ReportDetailsPage(
   const report = await prisma.report.findUnique({
     where: { id: reportId },
     include: {
-      location: {
-        include: {
-          organization: true,
-        },
-      },
+      location: { include: { organization: true } },
       organization: true,
-      photos: {
-        orderBy: { createdAt: "desc" },
-      },
+      photos: { orderBy: { createdAt: "desc" } },
       statusHistories: {
         orderBy: { createdAt: "desc" },
-        include: {
-          changedBy: {
-            select: { id: true, name: true, email: true },
-          },
-        },
+        include: { changedBy: { select: { id: true, name: true, email: true } } },
       },
     },
   });
@@ -70,112 +76,162 @@ export default async function ReportDetailsPage(
   const placeName = report.reportPlaceName || report.location?.name || "Punkt zgłoszenia";
   const placeAddress = report.reportAddress || report.location?.address || "Brak adresu";
   const orgName = report.organization?.name || report.location?.organization?.name || "Brak organizacji";
+  const status = report.status as ReportStatus;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">
-          Zgłoszenie #{report.id.substring(0, 8).toUpperCase()}
-        </h1>
-        <Link href="/reports">
-          <Button variant="outline">Wróć do listy</Button>
-        </Link>
-      </div>
+    <>
+      <section>
+        <div className="toolbar">
+          <Link className="btn btn-secondary btn-sm" href="/reports">
+            <ArrowLeft size={15} />
+            Wróć do listy
+          </Link>
+          <div className="spacer" />
+          <span className="pill" style={{ background: "var(--surface-2)", color: "var(--muted)" }}>
+            #{report.id.substring(0, 8).toUpperCase()}
+          </span>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Szczegóły zgłoszenia</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <p><strong>Status:</strong> {statusLabels[report.status] || report.status}</p>
-              <p><strong>Data zgłoszenia:</strong> {formatDate(report.createdAt)}</p>
-              <p><strong>Lokalizacja:</strong> {placeName}</p>
-              <p><strong>Adres:</strong> {placeAddress}</p>
-              <p><strong>Organizacja:</strong> {orgName}</p>
+      <div className="detail-grid">
+        <div className="stack">
+          <div className="card">
+            <div className="card-head">
+              <h2>Szczegóły zgłoszenia</h2>
+              <span className={`pill ${STATUS_CLASS[status]}`}>{STATUS_LABELS[status]}</span>
+            </div>
+            <div className="card-body stack" style={{ gap: 18 }}>
               <div>
-                <p className="font-semibold mb-1">Opis problemu</p>
-                <p className="text-slate-700 whitespace-pre-wrap">{report.description}</p>
+                <div className="sec-title" style={{ margin: "0 0 10px" }}>
+                  Opis problemu
+                </div>
+                <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                  {report.description}
+                </p>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Załączone zdjęcia ({report.photos.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
+              <dl className="kv">
+                <dt>Miejsce</dt>
+                <dd>{placeName}</dd>
+                <dt>Adres</dt>
+                <dd>{placeAddress}</dd>
+                <dt>Jednostka</dt>
+                <dd>{orgName}</dd>
+                <dt>Data zgłoszenia</dt>
+                <dd className="num">{formatDate(report.createdAt)}</dd>
+                <dt>Współrzędne</dt>
+                <dd className="num">
+                  {report.reportLatitude !== null && report.reportLongitude !== null
+                    ? `${report.reportLatitude.toFixed(5)}, ${report.reportLongitude.toFixed(5)}`
+                    : report.location
+                      ? `${report.location.latitude.toFixed(5)}, ${report.location.longitude.toFixed(5)}`
+                      : "—"}
+                </dd>
+              </dl>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Załączone zdjęcia</h2>
+              <span className="hint">{report.photos.length}</span>
+            </div>
+            <div className="card-body">
               {report.photos.length === 0 ? (
-                <p className="text-slate-600">Brak załączonych zdjęć.</p>
+                <div className="photo-empty">
+                  <Camera />
+                  <span>Brak zdjęć dołączonych do tego zgłoszenia.</span>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  className="thumbs"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+                >
                   {report.photos.map((photo) => (
                     <a
-                      href={photo.path}
                       key={photo.id}
+                      href={photo.path}
                       target="_blank"
                       rel="noreferrer"
-                      className="block rounded-lg overflow-hidden border border-slate-200"
+                      className="thumb"
                     >
                       <Image
                         src={photo.path}
                         alt={photo.filename}
-                        width={800}
-                        height={600}
-                        className="w-full h-48 object-cover"
+                        width={400}
+                        height={400}
+                        unoptimized
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     </a>
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Zgłaszający</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p><strong>Imię i nazwisko:</strong> {report.reporterName}</p>
-              <p><strong>Email:</strong> {report.reporterEmail}</p>
-              <p><strong>Telefon:</strong> {report.reporterPhone}</p>
-            </CardContent>
-          </Card>
+        <div className="stack">
+          <div className="card">
+            <div className="card-head">
+              <h2>Zgłaszający</h2>
+            </div>
+            <div className="card-body">
+              <dl className="kv">
+                <dt>Osoba</dt>
+                <dd>{report.reporterName}</dd>
+                <dt>E-mail</dt>
+                <dd style={{ overflowWrap: "anywhere" }}>{report.reporterEmail}</dd>
+                <dt>Telefon</dt>
+                <dd className="num">{report.reporterPhone || "—"}</dd>
+              </dl>
+              <div className="sec-title">Lokalizacja</div>
+              <p className="hintline" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <MapPin size={15} style={{ color: "var(--accent)", flex: "none", marginTop: 3 }} />
+                <span>
+                  {placeName}, {placeAddress}
+                </span>
+              </p>
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Historia statusów</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="card">
+            <div className="card-head">
+              <h2>Historia statusów</h2>
+              <span className="hint">{report.statusHistories.length}</span>
+            </div>
+            <div className="card-body">
               {report.statusHistories.length === 0 ? (
-                <p className="text-slate-600">Brak wpisów w historii statusów.</p>
+                <p className="hintline">Brak wpisów w historii statusów.</p>
               ) : (
-                <div className="space-y-3">
+                <ul className="timeline">
                   {report.statusHistories.map((history) => (
-                    <div key={history.id} className="rounded-md border border-slate-200 p-3">
-                      <p className="font-semibold text-slate-900">
-                        {statusLabels[history.status] || history.status}
-                      </p>
-                      <p className="text-xs text-slate-500">{formatDate(history.createdAt)}</p>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Zmienił: {history.changedBy.name} ({history.changedBy.email})
-                      </p>
-                      {history.note && (
-                        <p className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">
-                          {history.note}
-                        </p>
-                      )}
-                    </div>
+                    <li
+                      key={history.id}
+                      className={history.status === "RESOLVED" ? "done" : undefined}
+                    >
+                      <div className="tl-top">{STATUS_LABELS[history.status] || history.status}</div>
+                      <div className="tl-meta">
+                        {formatDay(history.createdAt)} · {history.changedBy.name}
+                      </div>
+                      {history.note ? <div className="tl-note">{history.note}</div> : null}
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h2>Zmień status</h2>
+            </div>
+            <div className="card-body">
+              <StatusForm reportId={report.id} currentStatus={status} />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

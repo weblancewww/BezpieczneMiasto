@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Check, ExternalLink, QrCode } from "lucide-react";
 import { toast } from "sonner";
 
 type LocationDetails = {
@@ -42,7 +38,6 @@ export default function EditLocationPage() {
     async function bootstrap() {
       try {
         const response = await fetch(`/api/locations/${locationId}`, { cache: "no-store" });
-
         const result = await response.json();
 
         if (!response.ok) {
@@ -62,12 +57,9 @@ export default function EditLocationPage() {
           longitude: String(result.longitude),
         });
       } catch (error) {
-        if (!active) {
-          return;
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Błąd ładowania");
         }
-
-        const message = error instanceof Error ? error.message : "Błąd ładowania";
-        toast.error(message);
       } finally {
         if (active) {
           setIsLoading(false);
@@ -107,73 +99,100 @@ export default function EditLocationPage() {
       router.push("/locations");
       router.refresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd zapisu";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd zapisu");
     } finally {
       setIsSaving(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">Edycja lokalizacji</h1>
-        <Link href="/locations">
-          <Button variant="outline">Wróć do listy</Button>
-        </Link>
-      </div>
+    <>
+      <section>
+        <div className="toolbar">
+          <Link className="btn btn-secondary btn-sm" href="/locations">
+            <ArrowLeft size={15} />
+            Wróć do listy
+          </Link>
+          <div className="spacer" />
+          {location ? (
+            <>
+              <a
+                className="btn btn-ghost btn-sm"
+                href={`/api/locations/${locationId}/qr`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <QrCode size={15} />
+                Kod QR
+              </a>
+              <a
+                className="btn btn-ghost btn-sm"
+                href={`/r/${location.qrToken}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={15} />
+                Link z QR
+              </a>
+            </>
+          ) : null}
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Edytuj dane lokalizacji</CardTitle>
-          <CardDescription>
-            {isLoading
-              ? "Ładowanie lokalizacji..."
-              : `Token QR: ${location?.qrToken.substring(0, 12)}...`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Nazwa</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))}
-                required
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="address">Adres</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(event) => setFormData((current) => ({ ...current, address: event.target.value }))}
-                required
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="description">Opis</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(event) =>
-                  setFormData((current) => ({ ...current, description: event.target.value }))
-                }
-                placeholder="Opis miejsca (opcjonalnie)"
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="latitude">Szerokość geograficzna</Label>
-                <Input
+      <div className="card">
+        <div className="card-head">
+          <h2>Edycja lokalizacji</h2>
+          <span className="hint">
+            {isLoading ? "Ładowanie…" : `Token QR: ${location?.qrToken.substring(0, 12)}…`}
+          </span>
+        </div>
+        <div className="card-body">
+          <form onSubmit={handleSubmit} className="stack">
+            <div className="form-grid">
+              <div className="field full">
+                <label htmlFor="name">Nazwa</label>
+                <input
+                  id="name"
+                  className="input"
+                  value={formData.name}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, name: event.target.value }))
+                  }
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="field full">
+                <label htmlFor="address">Adres</label>
+                <input
+                  id="address"
+                  className="input"
+                  value={formData.address}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, address: event.target.value }))
+                  }
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="field full">
+                <label htmlFor="description">Opis</label>
+                <textarea
+                  id="description"
+                  className="textarea"
+                  value={formData.description}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, description: event.target.value }))
+                  }
+                  placeholder="Opis miejsca (opcjonalnie)"
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="latitude">Szerokość geograficzna</label>
+                <input
                   id="latitude"
+                  className="input num"
                   type="number"
                   step="0.000001"
                   value={formData.latitude}
@@ -184,10 +203,11 @@ export default function EditLocationPage() {
                   disabled={isLoading}
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="longitude">Długość geograficzna</Label>
-                <Input
+              <div className="field">
+                <label htmlFor="longitude">Długość geograficzna</label>
+                <input
                   id="longitude"
+                  className="input num"
                   type="number"
                   step="0.000001"
                   value={formData.longitude}
@@ -200,26 +220,15 @@ export default function EditLocationPage() {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <a href={`/api/locations/${locationId}/qr`} target="_blank" rel="noreferrer">
-                <Button type="button" variant="outline" disabled={isLoading}>
-                  Otwórz kod QR
-                </Button>
-              </a>
-              {location ? (
-                <a href={`/r/${location.qrToken}`} target="_blank" rel="noreferrer">
-                  <Button type="button" variant="outline" disabled={isLoading}>
-                    Otwórz link z QR
-                  </Button>
-                </a>
-              ) : null}
-              <Button type="submit" disabled={isSaving || isLoading}>
-                {isSaving ? "Zapisywanie..." : "Zapisz zmiany"}
-              </Button>
+            <div className="inline justify-end">
+              <button type="submit" className="btn btn-primary" disabled={isSaving || isLoading}>
+                <Check size={17} />
+                {isSaving ? "Zapisywanie…" : "Zapisz zmiany"}
+              </button>
             </div>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }

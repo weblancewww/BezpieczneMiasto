@@ -1,6 +1,6 @@
 "use client";
 
-import { APIProvider, AdvancedMarker, Map, Pin, type MapMouseEvent } from "@vis.gl/react-google-maps";
+import { APIProvider, AdvancedMarker, Map, type MapMouseEvent } from "@vis.gl/react-google-maps";
 
 type Coordinates = {
   latitude: number;
@@ -14,7 +14,7 @@ type Props = {
 
 const defaultCenter = {
   lat: 49.655,
-  lng: 20.159,
+  lng: 21.16,
 };
 
 export function LocationPickerMap({ value, onChange }: Props) {
@@ -22,10 +22,11 @@ export function LocationPickerMap({ value, onChange }: Props) {
 
   if (!apiKey) {
     return (
-      <div className="bg-slate-100 rounded h-80 flex items-center justify-center px-6 text-center">
-        <p className="text-slate-600">
-          Brak klucza Google Maps. Ustaw NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, aby wybierać punkt na mapie.
-        </p>
+      <div className="photo-empty">
+        <span>
+          Brak klucza Google Maps. Ustaw NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, aby wybierać punkt na
+          mapie.
+        </span>
       </div>
     );
   }
@@ -40,35 +41,33 @@ export function LocationPickerMap({ value, onChange }: Props) {
     onChange({ latitude: latLng.lat, longitude: latLng.lng });
   }
 
-  const markerPosition = value
-    ? {
-        lat: value.latitude,
-        lng: value.longitude,
-      }
-    : null;
-
+  const markerPosition = value ? { lat: value.latitude, lng: value.longitude } : null;
   const initialCenter = markerPosition ?? defaultCenter;
 
   return (
-    <div className="space-y-3">
-      <div className="rounded overflow-hidden h-80 border border-slate-200">
-        <APIProvider apiKey={apiKey}>
-          <Map
-            defaultCenter={initialCenter}
-            defaultZoom={11}
-            mapId="location-picker-map"
-            gestureHandling="greedy"
-            onClick={handleMapClick}
-          >
-            {markerPosition ? (
-              <AdvancedMarker position={markerPosition} title="Wybrana lokalizacja">
-                <Pin background="#0f766e" borderColor="#0f172a" glyphColor="#ffffff" />
-              </AdvancedMarker>
-            ) : null}
-          </Map>
-        </APIProvider>
-      </div>
-      <p className="text-xs text-slate-600">Kliknij na mapie, aby ustawić lokalizację.</p>
+    <div className="map-picker">
+      <APIProvider apiKey={apiKey}>
+        <Map
+          defaultCenter={initialCenter}
+          defaultZoom={11}
+          mapId="location-picker-map"
+          gestureHandling="greedy"
+          disableDefaultUI
+          clickableIcons={false}
+          onClick={handleMapClick}
+        >
+          {markerPosition ? (
+            <AdvancedMarker position={markerPosition} title="Wybrana lokalizacja">
+              <span className="pin-dot accent" />
+            </AdvancedMarker>
+          ) : null}
+        </Map>
+      </APIProvider>
+      <span className="picker-hint">
+        {value
+          ? `${value.latitude.toFixed(5)}, ${value.longitude.toFixed(5)}`
+          : "Kliknij mapę, aby ustawić punkt"}
+      </span>
     </div>
   );
 }

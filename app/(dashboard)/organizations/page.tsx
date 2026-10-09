@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { AdminAreaPickerMap } from "@/components/map/admin-area-picker-map";
+import { Building2, Check, Landmark, MapPin, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { AdminAreaPickerMap } from "@/components/map/admin-area-picker-map";
 
 type OrganizationRow = {
   id: string;
@@ -26,6 +22,7 @@ type OrganizationRow = {
 export default function OrganizationsPage() {
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingAreaOrgId, setEditingAreaOrgId] = useState<string | null>(null);
   const [editingAreaValue, setEditingAreaValue] = useState("");
@@ -52,18 +49,13 @@ export default function OrganizationsPage() {
 
         const data = (await response.json()) as OrganizationRow[];
 
-        if (!active) {
-          return;
+        if (active) {
+          setOrganizations(data);
         }
-
-        setOrganizations(data);
       } catch (error) {
-        if (!active) {
-          return;
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Błąd ładowania");
         }
-
-        const message = error instanceof Error ? error.message : "Błąd ładowania";
-        toast.error(message);
       } finally {
         if (active) {
           setIsLoading(false);
@@ -78,10 +70,7 @@ export default function OrganizationsPage() {
     };
   }, []);
 
-  const roots = useMemo(
-    () => organizations.filter((org) => !org.parentId),
-    [organizations]
-  );
+  const roots = useMemo(() => organizations.filter((org) => !org.parentId), [organizations]);
 
   const byParent = useMemo(() => {
     const map = new Map<string, OrganizationRow[]>();
@@ -121,24 +110,21 @@ export default function OrganizationsPage() {
       }
 
       setOrganizations((current) => [...current, result.organization]);
-      setFormData({ name: "", slug: "", type: "GMINA", parentId: "", description: "", adminArea: "" });
+      setFormData({
+        name: "",
+        slug: "",
+        type: "GMINA",
+        parentId: "",
+        description: "",
+        adminArea: "",
+      });
+      setIsModalOpen(false);
       toast.success("Organizacja została utworzona");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd zapisu";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd zapisu");
     } finally {
       setIsSaving(false);
     }
-  }
-
-  function openAreaEditor(organization: OrganizationRow) {
-    setEditingAreaOrgId(organization.id);
-    setEditingAreaValue(organization.adminArea || "");
-  }
-
-  function closeAreaEditor() {
-    setEditingAreaOrgId(null);
-    setEditingAreaValue("");
   }
 
   async function handleAreaSave(organizationId: string) {
@@ -160,229 +146,281 @@ export default function OrganizationsPage() {
       setOrganizations((current) =>
         current.map((org) =>
           org.id === organizationId
-            ? {
-                ...org,
-                adminArea: result.organization.adminArea,
-              }
+            ? { ...org, adminArea: result.organization.adminArea }
             : org
         )
       );
 
       toast.success("Obszar organizacji zaktualizowany");
-      closeAreaEditor();
+      setEditingAreaOrgId(null);
+      setEditingAreaValue("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd zapisu obszaru";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd zapisu obszaru");
     } finally {
       setIsAreaSaving(false);
     }
   }
 
+  function renderNode(org: OrganizationRow, isChild: boolean) {
+    const Icon = org.type === "POWIAT" ? Landmark : Building2;
+    const isEditing = editingAreaOrgId === org.id;
+
+    return (
+      <li key={org.id}>
+        <div className="node">
+          <span className="n-ico">
+            <Icon />
+          </span>
+          <span className="n-main">
+            <div className="n-name">
+              {org.name}{" "}
+              <span
+                className={`tag ${org.type === "POWIAT" ? "type-POWIAT" : "type-GMINA"}`}
+                style={{ marginLeft: 6 }}
+              >
+                {org.type === "POWIAT" ? "Powiat" : "Gmina"}
+              </span>
+            </div>
+            <div className="n-desc">{org.description || "—"}</div>
+            {org.adminArea ? (
+              <div className="n-desc" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <MapPin size={12} style={{ color: "var(--accent)" }} />
+                {org.adminArea}
+              </div>
+            ) : null}
+          </span>
+          <span className="n-meta">
+            {org._count.users} kont · {org._count.locations} lok.
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              if (isEditing) {
+                setEditingAreaOrgId(null);
+                setEditingAreaValue("");
+              } else {
+                setEditingAreaOrgId(org.id);
+                setEditingAreaValue(org.adminArea || "");
+              }
+            }}
+          >
+            {isEditing ? "Zamknij" : "Obszar"}
+          </button>
+        </div>
+
+        {isEditing ? (
+          <div style={{ padding: "4px 22px 20px 74px" }}>
+            <div className="stack" style={{ gap: 12 }}>
+              <div className="field">
+                <label htmlFor={`area-${org.id}`}>Obszar organizacji</label>
+                <input
+                  id={`area-${org.id}`}
+                  className="input"
+                  value={editingAreaValue}
+                  onChange={(event) => setEditingAreaValue(event.target.value)}
+                  placeholder="np. Gmina Gorlice, Powiat Gorlicki"
+                />
+              </div>
+              <AdminAreaPickerMap value={editingAreaValue} onChange={setEditingAreaValue} />
+              <div className="inline justify-end">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setEditingAreaOrgId(null);
+                    setEditingAreaValue("");
+                  }}
+                >
+                  Anuluj
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={isAreaSaving}
+                  onClick={() => handleAreaSave(org.id)}
+                >
+                  <Check size={17} />
+                  {isAreaSaving ? "Zapisywanie…" : "Zapisz obszar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {!isChild && (byParent.get(org.id) || []).length > 0 ? (
+          <ul className="tree child">
+            {(byParent.get(org.id) || []).map((child) => renderNode(child, true))}
+          </ul>
+        ) : null}
+      </li>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-slate-900">Organizacje</h1>
+    <>
+      <section>
+        <div className="toolbar">
+          <span className="hintline num">{organizations.length} organizacji</span>
+          <div className="spacer" />
+          <button type="button" className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+            <Plus size={17} />
+            Nowa organizacja
+          </button>
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Nowa organizacja</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="org-name">Nazwa</Label>
-              <Input
-                id="org-name"
-                value={formData.name}
-                onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="org-slug">Slug</Label>
-              <Input
-                id="org-slug"
-                value={formData.slug}
-                onChange={(event) => setFormData((current) => ({ ...current, slug: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="org-type">Typ</Label>
-              <select
-                id="org-type"
-                value={formData.type}
-                onChange={(event) => setFormData((current) => ({ ...current, type: event.target.value }))}
-                className="h-10 rounded-md border border-slate-200 px-3 text-sm"
-              >
-                <option value="POWIAT">Powiat</option>
-                <option value="GMINA">Gmina</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="org-parent">Organizacja nadrzędna</Label>
-              <select
-                id="org-parent"
-                value={formData.parentId}
-                onChange={(event) => setFormData((current) => ({ ...current, parentId: event.target.value }))}
-                className="h-10 rounded-md border border-slate-200 px-3 text-sm"
-              >
-                <option value="">Brak</option>
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="org-admin-area">Obszar (gminy/powiaty do auto-przypisania)</Label>
-              <Input
-                id="org-admin-area"
-                value={formData.adminArea}
-                onChange={(event) =>
-                  setFormData((current) => ({ ...current, adminArea: event.target.value }))
-                }
-                placeholder="np. Gmina Gorlice, Powiat Gorlicki"
-              />
-              <p className="text-xs text-muted-foreground">Nazwy oddzielone przecinkami – używane do automatycznego dopasowania zgłoszeń z mapy.</p>
-              <AdminAreaPickerMap
-                value={formData.adminArea}
-                onChange={(value) =>
-                  setFormData((current) => ({ ...current, adminArea: value }))
-                }
-              />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="org-description">Opis</Label>
-              <Textarea
-                id="org-description"
-                value={formData.description}
-                onChange={(event) =>
-                  setFormData((current) => ({ ...current, description: event.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Zapisywanie..." : "Utwórz organizację"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <section className="card" style={{ overflow: "hidden" }}>
+        {isLoading ? (
+          <div className="empty">
+            <p>Ładowanie organizacji…</p>
+          </div>
+        ) : roots.length === 0 ? (
+          <div className="empty">
+            <Building2 />
+            <p>Brak organizacji.</p>
+          </div>
+        ) : (
+          <ul className="tree">{roots.map((root) => renderNode(root, false))}</ul>
+        )}
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Hierarchia organizacji</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-slate-600">Ładowanie organizacji...</p>
-          ) : roots.length === 0 ? (
-            <p className="text-slate-600">Brak organizacji.</p>
-          ) : (
-            <div className="space-y-4">
-              {roots.map((root) => (
-                <div key={root.id} className="rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-900">{root.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {root.type} · użytkownicy: {root._count.users} · lokalizacje: {root._count.locations}
-                      </p>
-                      {root.adminArea && (
-                        <p className="text-xs text-muted-foreground">Obszar: {root.adminArea}</p>
-                      )}
-                    </div>
-                    <span className="text-xs text-slate-500">/{root.slug}</span>
-                  </div>
-
-                  <div className="mt-3">
-                    {editingAreaOrgId === root.id ? (
-                      <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
-                        <Label htmlFor={`edit-area-${root.id}`}>Obszar organizacji</Label>
-                        <Input
-                          id={`edit-area-${root.id}`}
-                          value={editingAreaValue}
-                          onChange={(event) => setEditingAreaValue(event.target.value)}
-                          placeholder="np. Gmina Gorlice, Powiat Gorlicki"
-                        />
-                        <AdminAreaPickerMap value={editingAreaValue} onChange={setEditingAreaValue} />
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            onClick={() => handleAreaSave(root.id)}
-                            disabled={isAreaSaving}
-                          >
-                            {isAreaSaving ? "Zapisywanie..." : "Zapisz obszar"}
-                          </Button>
-                          <Button type="button" variant="outline" onClick={closeAreaEditor}>
-                            Anuluj
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button type="button" variant="outline" onClick={() => openAreaEditor(root)}>
-                        Edytuj obszar na mapie
-                      </Button>
-                    )}
-                  </div>
-
-                  {(byParent.get(root.id) || []).length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {(byParent.get(root.id) || []).map((child) => (
-                        <div
-                          key={child.id}
-                          className="ml-4 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
-                        >
-                          <p className="font-medium text-slate-800">{child.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {child.type} · użytkownicy: {child._count.users} · lokalizacje: {child._count.locations}
-                          </p>
-                          {child.adminArea && (
-                            <p className="text-xs text-muted-foreground">Obszar: {child.adminArea}</p>
-                          )}
-
-                          <div className="mt-2">
-                            {editingAreaOrgId === child.id ? (
-                              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
-                                <Label htmlFor={`edit-area-${child.id}`}>Obszar organizacji</Label>
-                                <Input
-                                  id={`edit-area-${child.id}`}
-                                  value={editingAreaValue}
-                                  onChange={(event) => setEditingAreaValue(event.target.value)}
-                                  placeholder="np. Gmina Gorlice, Powiat Gorlicki"
-                                />
-                                <AdminAreaPickerMap value={editingAreaValue} onChange={setEditingAreaValue} />
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    onClick={() => handleAreaSave(child.id)}
-                                    disabled={isAreaSaving}
-                                  >
-                                    {isAreaSaving ? "Zapisywanie..." : "Zapisz obszar"}
-                                  </Button>
-                                  <Button type="button" variant="outline" onClick={closeAreaEditor}>
-                                    Anuluj
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <Button type="button" variant="outline" onClick={() => openAreaEditor(child)}>
-                                Edytuj obszar na mapie
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+      <div className={`modal${isModalOpen ? " open" : ""}`} role="dialog" aria-modal="true">
+        {isModalOpen ? (
+          <>
+            <div className="scrim" onClick={() => setIsModalOpen(false)} aria-hidden="true" />
+            <div className="modal-card wide">
+              <div className="modal-head">
+                <div>
+                  <h2>Nowa organizacja</h2>
+                  <p>Dodaj powiat lub gminę do hierarchii.</p>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  className="iconbtn"
+                  aria-label="Zamknij"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  <X />
+                </button>
+              </div>
+              <form onSubmit={handleCreate}>
+                <div className="modal-body">
+                  <div className="form-grid">
+                    <div className="field full">
+                      <label htmlFor="org-name">Nazwa</label>
+                      <input
+                        id="org-name"
+                        className="input"
+                        placeholder="np. Gmina Gorlice"
+                        value={formData.name}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, name: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="org-slug">Slug</label>
+                      <input
+                        id="org-slug"
+                        className="input"
+                        placeholder="gmina-gorlice"
+                        value={formData.slug}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, slug: event.target.value }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="org-type">Typ</label>
+                      <select
+                        id="org-type"
+                        className="select"
+                        value={formData.type}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, type: event.target.value }))
+                        }
+                      >
+                        <option value="GMINA">Gmina</option>
+                        <option value="POWIAT">Powiat</option>
+                      </select>
+                    </div>
+                    <div className="field full">
+                      <label htmlFor="org-parent">Organizacja nadrzędna</label>
+                      <select
+                        id="org-parent"
+                        className="select"
+                        value={formData.parentId}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, parentId: event.target.value }))
+                        }
+                      >
+                        <option value="">Brak</option>
+                        {organizations.map((organization) => (
+                          <option key={organization.id} value={organization.id}>
+                            {organization.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field full">
+                      <label htmlFor="org-admin-area">Obszar (gminy/powiaty do auto-przypisania)</label>
+                      <input
+                        id="org-admin-area"
+                        className="input"
+                        placeholder="np. Gmina Gorlice, Powiat Gorlicki"
+                        value={formData.adminArea}
+                        onChange={(event) =>
+                          setFormData((current) => ({ ...current, adminArea: event.target.value }))
+                        }
+                      />
+                      <span className="hintline">
+                        Nazwy oddzielone przecinkami – używane do automatycznego dopasowania zgłoszeń
+                        z mapy.
+                      </span>
+                      <AdminAreaPickerMap
+                        value={formData.adminArea}
+                        onChange={(value) =>
+                          setFormData((current) => ({ ...current, adminArea: value }))
+                        }
+                      />
+                    </div>
+                    <div className="field full">
+                      <label htmlFor="org-description">Opis</label>
+                      <textarea
+                        id="org-description"
+                        className="textarea"
+                        value={formData.description}
+                        onChange={(event) =>
+                          setFormData((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-foot">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setIsModalOpen(false)}
+                  >
+                    Anuluj
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={isSaving}>
+                    <Check size={17} />
+                    {isSaving ? "Zapisywanie…" : "Utwórz organizację"}
+                  </button>
+                </div>
+              </form>
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          </>
+        ) : null}
+      </div>
+    </>
   );
 }

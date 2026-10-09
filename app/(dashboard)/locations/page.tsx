@@ -1,18 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { useSearchParams } from "next/navigation";
+import { Download, ExternalLink, Pencil, Plus, QrCode, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 type LocationRow = {
@@ -24,19 +15,18 @@ type LocationRow = {
   longitude: number;
   qrToken: string;
   createdAt: string;
-  organization: {
-    name: string;
-  };
-  _count: {
-    reports: number;
-  };
+  organization: { name: string };
+  _count: { reports: number };
 };
 
-export default function LocationsPage() {
+function LocationsContent() {
+  const searchParams = useSearchParams();
+  const query = searchParams.get("q") ?? "";
+
   const [locations, setLocations] = useState<LocationRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [query, setQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [qrLocation, setQrLocation] = useState<LocationRow | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,18 +41,13 @@ export default function LocationsPage() {
 
         const data = (await response.json()) as LocationRow[];
 
-        if (!active) {
-          return;
+        if (active) {
+          setLocations(data);
         }
-
-        setLocations(data);
       } catch (error) {
-        if (!active) {
-          return;
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Błąd ładowania");
         }
-
-        const message = error instanceof Error ? error.message : "Błąd ładowania";
-        toast.error(message);
       } finally {
         if (active) {
           setIsLoading(false);
@@ -77,24 +62,21 @@ export default function LocationsPage() {
     };
   }, []);
 
-  async function refresh() {
-    try {
-      setIsLoading(true);
-      const response = await fetch("/api/locations", { cache: "no-store" });
+  const filtered = useMemo(() => {
+    const lowered = query.trim().toLowerCase();
 
-      if (!response.ok) {
-        throw new Error("Nie udało się pobrać lokalizacji");
-      }
-
-      const data = (await response.json()) as LocationRow[];
-      setLocations(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd odświeżania";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+    if (!lowered) {
+      return locations;
     }
-  }
+
+    return locations.filter(
+      (location) =>
+        location.name.toLowerCase().includes(lowered) ||
+        location.address.toLowerCase().includes(lowered) ||
+        location.organization.name.toLowerCase().includes(lowered) ||
+        location.qrToken.toLowerCase().includes(lowered)
+    );
+  }, [locations, query]);
 
   async function deleteLocation(locationId: string) {
     if (!window.confirm("Czy na pewno usunąć lokalizację?")) {
@@ -103,10 +85,7 @@ export default function LocationsPage() {
 
     try {
       setDeletingId(locationId);
-      const response = await fetch(`/api/locations/${locationId}`, {
-        method: "DELETE",
-      });
-
+      const response = await fetch(`/api/locations/${locationId}`, { method: "DELETE" });
       const result = await response.json();
 
       if (!response.ok) {
@@ -116,121 +95,180 @@ export default function LocationsPage() {
       setLocations((current) => current.filter((location) => location.id !== locationId));
       toast.success("Lokalizacja została usunięta");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd usuwania";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd usuwania");
     } finally {
       setDeletingId(null);
     }
   }
 
-  const filteredLocations = useMemo(() => {
-    const lowered = query.trim().toLowerCase();
-
-    if (!lowered) {
-      return locations;
-    }
-
-    return locations.filter((location) =>
-      location.name.toLowerCase().includes(lowered) ||
-      location.address.toLowerCase().includes(lowered) ||
-      location.organization.name.toLowerCase().includes(lowered) ||
-      location.qrToken.toLowerCase().includes(lowered)
-    );
-  }, [locations, query]);
-
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Lokalizacje</h1>
-        <div className="flex gap-2">
-          <Button onClick={refresh} variant="outline" disabled={isLoading}>
-            Odśwież
-          </Button>
-          <Link href="/locations/new">
-            <Button>+ Nowa lokalizacja</Button>
+    <>
+      <section>
+        <div className="toolbar">
+          <span className="hintline num">{filtered.length} punktów zgłoszeń</span>
+          <div className="spacer" />
+          <Link className="btn btn-primary" href="/locations/new">
+            <Plus size={17} />
+            Nowa lokalizacja
           </Link>
         </div>
-      </div>
+      </section>
 
-      <Card className="neo-card">
-        <CardHeader className="space-y-4">
-          <CardTitle className="text-foreground">Lista lokalizacji</CardTitle>
-          <Input
-            placeholder="Szukaj po nazwie, adresie, organizacji lub tokenie QR"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground">Ładowanie lokalizacji...</p>
-          ) : filteredLocations.length === 0 ? (
-            <p className="text-muted-foreground">Brak lokalizacji spełniających kryteria.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nazwa</TableHead>
-                  <TableHead>Adres</TableHead>
-                  <TableHead>Organizacja</TableHead>
-                  <TableHead>Współrzędne</TableHead>
-                  <TableHead>Zgłoszenia</TableHead>
-                  <TableHead>QR</TableHead>
-                  <TableHead>Akcja</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLocations.map((location) => (
-                  <TableRow key={location.id}>
-                    <TableCell className="font-medium">{location.name}</TableCell>
-                    <TableCell>{location.address}</TableCell>
-                    <TableCell>{location.organization.name}</TableCell>
-                    <TableCell>
-                      {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
-                    </TableCell>
-                    <TableCell>{location._count.reports}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <code className="text-xs text-muted-foreground">{location.qrToken.substring(0, 12)}...</code>
-                        <a
-                          href={`/api/locations/${location.id}/qr`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          Otwórz QR
-                        </a>
-                        <a
-                          href={`/r/${location.qrToken}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          Otwórz link z QR
-                        </a>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Link href={`/locations/${location.id}/edit`}>
-                          <Button variant="outline">Edytuj</Button>
-                        </Link>
-                        <Button
-                          variant="destructive"
-                          onClick={() => deleteLocation(location.id)}
-                          disabled={deletingId === location.id}
-                        >
-                          {deletingId === location.id ? "Usuwanie..." : "Usuń"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <section className="card" style={{ overflow: "hidden" }}>
+        {isLoading ? (
+          <div className="empty">
+            <p>Ładowanie lokalizacji…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="empty">
+            <QrCode />
+            <p>Brak lokalizacji spełniających kryteria.</p>
+          </div>
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Lokalizacja</th>
+                <th>Adres i jednostka</th>
+                <th>Współrzędne</th>
+                <th style={{ textAlign: "right" }}>Zgł.</th>
+                <th aria-label="Akcje" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((location) => (
+                <tr key={location.id} onClick={() => setQrLocation(location)}>
+                  <td>
+                    <div className="t-main">{location.name}</div>
+                    <div className="t-sub">{location.description || "Zgłoszenia ogólne"}</div>
+                  </td>
+                  <td>
+                    <div className="t-sub" style={{ fontSize: 13 }}>
+                      {location.address}
+                      <div style={{ marginTop: 3 }}>{location.organization.name}</div>
+                    </div>
+                  </td>
+                  <td className="num-col" style={{ textAlign: "left", fontSize: 12.5 }}>
+                    {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                  </td>
+                  <td className="num-col">{location._count.reports}</td>
+                  <td onClick={(event) => event.stopPropagation()}>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        title="Kod QR"
+                        aria-label={`Kod QR: ${location.name}`}
+                        onClick={() => setQrLocation(location)}
+                      >
+                        <QrCode />
+                      </button>
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        href={`/locations/${location.id}/edit`}
+                        title="Edytuj"
+                        aria-label={`Edytuj: ${location.name}`}
+                      >
+                        <Pencil />
+                      </Link>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        title="Usuń"
+                        aria-label={`Usuń: ${location.name}`}
+                        disabled={deletingId === location.id}
+                        onClick={() => deleteLocation(location.id)}
+                      >
+                        <Trash2 />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <div className={`modal${qrLocation ? " open" : ""}`} role="dialog" aria-modal="true">
+        {qrLocation ? (
+          <>
+            <div className="scrim" onClick={() => setQrLocation(null)} aria-hidden="true" />
+            <div className="modal-card">
+              <div className="modal-head">
+                <div>
+                  <h2>Kod QR lokalizacji</h2>
+                  <p>{qrLocation.name}</p>
+                </div>
+                <button
+                  type="button"
+                  className="iconbtn"
+                  aria-label="Zamknij"
+                  onClick={() => setQrLocation(null)}
+                >
+                  <X />
+                </button>
+              </div>
+              <div
+                className="modal-body stack"
+                style={{ alignItems: "center", textAlign: "center", gap: 16 }}
+              >
+                <div
+                  style={{
+                    padding: 18,
+                    background: "#fff",
+                    borderRadius: 12,
+                    border: "1px solid var(--hairline)",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/locations/${qrLocation.id}/qr`}
+                    alt={`Kod QR dla ${qrLocation.name}`}
+                    width={220}
+                    height={220}
+                    style={{ width: 220, height: 220 }}
+                  />
+                </div>
+                <p className="hintline" style={{ maxWidth: "38ch" }}>
+                  Obywatel skanuje kod przy punkcie i trafia na formularz zgłoszenia przypisany do
+                  tej lokalizacji.
+                  <br />
+                  <span className="mono">{qrLocation.qrToken}</span>
+                </p>
+                <div className="inline">
+                  <a
+                    className="btn btn-secondary"
+                    href={`/api/locations/${qrLocation.id}/qr`}
+                    download
+                  >
+                    <Download size={17} />
+                    Pobierz PNG
+                  </a>
+                  <a className="btn btn-ghost" href={`/r/${qrLocation.qrToken}`} target="_blank" rel="noreferrer">
+                    <ExternalLink size={17} />
+                    Otwórz link
+                  </a>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+export default function LocationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="empty">
+          <p>Ładowanie lokalizacji…</p>
+        </div>
+      }
+    >
+      <LocationsContent />
+    </Suspense>
   );
 }

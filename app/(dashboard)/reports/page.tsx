@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { reportStatusLabel, type ReportStatus } from "@/lib/utils";
 
@@ -32,67 +22,53 @@ type ReportRow = {
   } | null;
 };
 
-const statusOptions: ReportStatus[] = ["NEW", "ANALYSIS", "IN_PROGRESS", "RESOLVED"];
+const STATUS_ORDER: ReportStatus[] = ["NEW", "ANALYSIS", "IN_PROGRESS", "RESOLVED"];
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleString("pl-PL", {
+const STATUS_CLASS: Record<ReportStatus, string> = {
+  NEW: "new",
+  ANALYSIS: "analysis",
+  IN_PROGRESS: "progress",
+  RESOLVED: "resolved",
+};
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("pl-PL", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
-export default function ReportsPage() {
+function ReportsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | ReportStatus>("ALL");
-  const [savingReportId, setSavingReportId] = useState<string | null>(null);
 
-  async function fetchReportsList() {
-    const response = await fetch("/api/reports", { cache: "no-store" });
-
-    if (!response.ok) {
-      throw new Error("Nie udało się pobrać zgłoszeń");
-    }
-
-    return (await response.json()) as ReportRow[];
-  }
-
-  async function loadReports() {
-    try {
-      setIsLoading(true);
-      const data = await fetchReportsList();
-      setReports(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd ładowania";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const query = searchParams.get("q") ?? "";
+  const statusFilter = (searchParams.get("status") as ReportStatus | null) ?? "ALL";
 
   useEffect(() => {
     let active = true;
 
     async function bootstrap() {
       try {
-        const data = await fetchReportsList();
+        const response = await fetch("/api/reports", { cache: "no-store" });
 
-        if (!active) {
-          return;
+        if (!response.ok) {
+          throw new Error("Nie udało się pobrać zgłoszeń");
         }
 
-        setReports(data);
+        const data = (await response.json()) as ReportRow[];
+
+        if (active) {
+          setReports(data);
+        }
       } catch (error) {
-        if (!active) {
-          return;
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Błąd ładowania");
         }
-
-        const message = error instanceof Error ? error.message : "Błąd ładowania";
-        toast.error(message);
       } finally {
         if (active) {
           setIsLoading(false);
@@ -107,13 +83,11 @@ export default function ReportsPage() {
     };
   }, []);
 
-  const filteredReports = useMemo(() => {
+  const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase();
 
     return reports.filter((report) => {
-      const matchesStatus = statusFilter === "ALL" || report.status === statusFilter;
-
-      if (!matchesStatus) {
+      if (statusFilter !== "ALL" && report.status !== statusFilter) {
         return false;
       }
 
@@ -131,152 +105,132 @@ export default function ReportsPage() {
     });
   }, [query, reports, statusFilter]);
 
-  async function saveStatus(reportId: string, status: ReportStatus) {
-    const previousStatus = reports.find((report) => report.id === reportId)?.status;
+  const counts = useMemo(
+    () =>
+      STATUS_ORDER.reduce(
+        (acc, status) => {
+          acc[status] = reports.filter((report) => report.status === status).length;
+          return acc;
+        },
+        {} as Record<ReportStatus, number>
+      ),
+    [reports]
+  );
 
-    if (!previousStatus || previousStatus === status) {
-      return;
+  function setStatusFilter(next: "ALL" | ReportStatus) {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (next === "ALL") {
+      params.delete("status");
+    } else {
+      params.set("status", next);
     }
 
-    setReports((current) =>
-      current.map((report) =>
-        report.id === reportId ? { ...report, status } : report
-      )
-    );
-
-    try {
-      setSavingReportId(reportId);
-      const response = await fetch(`/api/reports/${reportId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status,
-          note: "",
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Nie udało się zapisać statusu");
-      }
-
-      toast.success("Status zgłoszenia został zaktualizowany");
-    } catch (error) {
-      setReports((current) =>
-        current.map((report) =>
-          report.id === reportId ? { ...report, status: previousStatus } : report
-        )
-      );
-      const message = error instanceof Error ? error.message : "Błąd zapisu statusu";
-      toast.error(message);
-    } finally {
-      setSavingReportId(null);
-    }
+    router.replace(`/reports${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Zgłoszenia</h1>
-        <Button onClick={loadReports} variant="outline" disabled={isLoading}>
-          Odśwież
-        </Button>
-      </div>
+  const chips: { key: "ALL" | ReportStatus; label: string; count: number }[] = [
+    { key: "ALL", label: "Wszystkie", count: reports.length },
+    ...STATUS_ORDER.map((status) => ({
+      key: status,
+      label: reportStatusLabel[status],
+      count: counts[status] ?? 0,
+    })),
+  ];
 
-      <Card className="neo-card">
-        <CardHeader className="space-y-4">
-          <CardTitle className="text-foreground">Lista zgłoszeń</CardTitle>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Input
-              placeholder="Szukaj po zgłaszającym, lokalizacji, opisie lub ID"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "ALL" | ReportStatus)}
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="ALL">Wszystkie statusy</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {reportStatusLabel[status]}
-                </option>
-              ))}
-            </select>
+  return (
+    <>
+      <section>
+        <div className="toolbar">
+          <div className="chips">
+            {chips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                className={`chip${statusFilter === chip.key ? " active" : ""}`}
+                onClick={() => setStatusFilter(chip.key)}
+              >
+                {chip.label}
+                <span className="c-n">{chip.count}</span>
+              </button>
+            ))}
           </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground">Ładowanie zgłoszeń...</p>
-          ) : filteredReports.length === 0 ? (
-            <p className="text-muted-foreground">Brak zgłoszeń spełniających kryteria.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Lokalizacja</TableHead>
-                  <TableHead>Zgłaszający</TableHead>
-                  <TableHead>Opis</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Szczegóły</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredReports.map((report) => (
-                  <TableRow key={report.id}>
-                    <TableCell className="font-medium">#{report.id.substring(0, 8).toUpperCase()}</TableCell>
-                    <TableCell>{formatDate(report.createdAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{report.reportPlaceName || report.location?.name || "Punkt zgłoszenia"}</span>
-                        <span className="text-xs text-muted-foreground">{report.reportAddress || report.location?.address || "Brak adresu"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{report.reporterName}</span>
-                        <span className="text-xs text-muted-foreground">{report.reporterEmail}</span>
-                        <span className="text-xs text-muted-foreground">{report.reporterPhone}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate" title={report.description}>
-                      {report.description}
-                    </TableCell>
-                    <TableCell className="space-y-2">
-                      <select
-                        value={report.status}
-                        onChange={(event) => {
-                          void saveStatus(report.id, event.target.value as ReportStatus);
-                        }}
-                        className="h-11 min-w-[220px] w-full rounded-md border border-input bg-background px-3 text-base"
-                        disabled={savingReportId === report.id}
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {reportStatusLabel[status]}
-                          </option>
-                        ))}
-                      </select>
-                      {savingReportId === report.id ? (
-                        <p className="text-xs text-muted-foreground">Zapisywanie...</p>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Link href={`/reports/${report.id}`}>
-                        <Button variant="outline">Szczegóły</Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          <div className="spacer" />
+          <span className="hintline num">
+            {filtered.length} z {reports.length}
+          </span>
+        </div>
+      </section>
+
+      <section className="card" style={{ overflow: "hidden" }}>
+        {isLoading ? (
+          <div className="empty">
+            <p>Ładowanie zgłoszeń…</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="empty">
+            <Search />
+            <p>Brak zgłoszeń spełniających kryteria.</p>
+          </div>
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Kod</th>
+                <th>Miejsce i opis</th>
+                <th>Zgłaszający</th>
+                <th>Data</th>
+                <th>Status</th>
+                <th aria-label="Akcje" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((report) => (
+                <tr key={report.id} onClick={() => router.push(`/reports/${report.id}`)}>
+                  <td className="t-code">#{report.id.substring(0, 8).toUpperCase()}</td>
+                  <td>
+                    <div className="t-main">
+                      {report.reportPlaceName || report.location?.name || "Punkt zgłoszenia"}
+                    </div>
+                    <div className="t-sub">{report.description}</div>
+                  </td>
+                  <td>
+                    <div className="t-main" style={{ fontWeight: 500 }}>
+                      {report.reporterName}
+                    </div>
+                    <div className="t-sub">{report.reporterPhone || report.reporterEmail}</div>
+                  </td>
+                  <td className="num-col" style={{ textAlign: "left" }}>
+                    {formatDate(report.createdAt)}
+                  </td>
+                  <td>
+                    <span className={`pill ${STATUS_CLASS[report.status]}`}>
+                      {reportStatusLabel[report.status]}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "right", width: 40, color: "var(--muted)" }}>
+                    <span aria-hidden="true">›</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="empty">
+          <p>Ładowanie zgłoszeń…</p>
+        </div>
+      }
+    >
+      <ReportsContent />
+    </Suspense>
   );
 }

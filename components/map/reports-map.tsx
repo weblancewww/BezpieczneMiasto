@@ -2,9 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { APIProvider, AdvancedMarker, InfoWindow, Map as GoogleMap, Pin } from "@vis.gl/react-google-maps";
-import { cn, reportStatusClass, reportStatusLabel, type ReportStatus } from "@/lib/utils";
+import { APIProvider, AdvancedMarker, Map as GoogleMap } from "@vis.gl/react-google-maps";
+import { X } from "lucide-react";
 import { MapReportDialog } from "./map-report-dialog";
+import type { ReportStatus } from "@/lib/utils";
 
 type MarkerPoint = {
   id: string;
@@ -27,226 +28,213 @@ type MarkerGroup = {
   dominantStatus: ReportStatus;
 };
 
-const statusColor: Record<MarkerPoint["status"], string> = {
-  NEW: "#ef4444",
-  ANALYSIS: "#f59e0b",
-  IN_PROGRESS: "#3b82f6",
-  RESOLVED: "#10b981",
+const STATUS_ORDER: ReportStatus[] = ["NEW", "ANALYSIS", "IN_PROGRESS", "RESOLVED"];
+
+const STATUS_META: Record<ReportStatus, { label: string; cls: string }> = {
+  NEW: { label: "Nowe", cls: "new" },
+  ANALYSIS: { label: "Podjęte do analizy", cls: "analysis" },
+  IN_PROGRESS: { label: "W trakcie rozwiązywania", cls: "progress" },
+  RESOLVED: { label: "Rozwiązane", cls: "resolved" },
 };
 
-const statusDotClass: Record<MarkerPoint["status"], string> = {
-  NEW: "bg-rose-500",
-  ANALYSIS: "bg-amber-500",
-  IN_PROGRESS: "bg-sky-500",
-  RESOLVED: "bg-emerald-500",
-};
-
-const statusPriority: Record<ReportStatus, number> = {
+const STATUS_PRIORITY: Record<ReportStatus, number> = {
   NEW: 4,
   ANALYSIS: 3,
   IN_PROGRESS: 2,
   RESOLVED: 1,
 };
 
+function shortCode(id: string) {
+  return `#${id.substring(0, 8).toUpperCase()}`;
+}
+
 export function ReportsMap({ markers }: Props) {
   const router = useRouter();
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const markerClickedRef = useRef(false);
-  const [enabledStatuses, setEnabledStatuses] = useState<Record<MarkerPoint["status"], boolean>>({
+
+  const [enabledStatuses, setEnabledStatuses] = useState<Record<ReportStatus, boolean>>({
     NEW: true,
     ANALYSIS: true,
     IN_PROGRESS: true,
     RESOLVED: true,
   });
-  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [clickedPoint, setClickedPoint] = useState<{ lat: number; lng: number } | null>(null);
 
-  const visibleMarkers = useMemo(
-    () => markers.filter((marker) => enabledStatuses[marker.status]),
-    [enabledStatuses, markers]
+  const statusCounts = useMemo(
+    () =>
+      markers.reduce(
+        (acc, marker) => {
+          acc[marker.status] += 1;
+          return acc;
+        },
+        { NEW: 0, ANALYSIS: 0, IN_PROGRESS: 0, RESOLVED: 0 } as Record<ReportStatus, number>
+      ),
+    [markers]
   );
 
-  const statusCounts = useMemo(() => {
-    return markers.reduce(
-      (acc, marker) => {
-        acc[marker.status] += 1;
-        return acc;
-      },
-      { NEW: 0, ANALYSIS: 0, IN_PROGRESS: 0, RESOLVED: 0 } as Record<MarkerPoint["status"], number>
-    );
-  }, [markers]);
+  const groups = useMemo<MarkerGroup[]>(() => {
+    const map = new Map<string, MarkerGroup>();
 
-  const groupedMarkers = useMemo<MarkerGroup[]>(() => {
-    const groups = new Map<string, MarkerGroup>();
+    markers
+      .filter((marker) => enabledStatuses[marker.status])
+      .forEach((marker) => {
+        const lat = Number(marker.latitude.toFixed(6));
+        const lng = Number(marker.longitude.toFixed(6));
+        const key = `${lat}:${lng}:${marker.locationName}`;
+        const existing = map.get(key);
 
-    visibleMarkers.forEach((marker) => {
-      const lat = Number(marker.latitude.toFixed(6));
-      const lng = Number(marker.longitude.toFixed(6));
-      const key = `${lat}:${lng}:${marker.locationName}`;
-      const existing = groups.get(key);
-
-      if (existing) {
-        existing.reports.push(marker);
-
-        if (statusPriority[marker.status] > statusPriority[existing.dominantStatus]) {
-          existing.dominantStatus = marker.status;
+        if (existing) {
+          existing.reports.push(marker);
+          if (STATUS_PRIORITY[marker.status] > STATUS_PRIORITY[existing.dominantStatus]) {
+            existing.dominantStatus = marker.status;
+          }
+          return;
         }
 
-        return;
-      }
-
-      groups.set(key, {
-        key,
-        locationName: marker.locationName,
-        latitude: lat,
-        longitude: lng,
-        reports: [marker],
-        dominantStatus: marker.status,
+        map.set(key, {
+          key,
+          locationName: marker.locationName,
+          latitude: lat,
+          longitude: lng,
+          reports: [marker],
+          dominantStatus: marker.status,
+        });
       });
-    });
 
-    return Array.from(groups.values());
-  }, [visibleMarkers]);
+    return Array.from(map.values());
+  }, [markers, enabledStatuses]);
 
-  const selectedGroup = useMemo(
-    () => groupedMarkers.find((group) => group.key === selectedGroupKey) || null,
-    [groupedMarkers, selectedGroupKey]
+  const selected = useMemo(
+    () => groups.find((group) => group.key === selectedKey) ?? null,
+    [groups, selectedKey]
   );
 
   if (!apiKey) {
     return (
-      <div className="bg-card border border-border rounded-lg h-96 flex items-center justify-center px-6 text-center">
-        <p className="text-muted-foreground">
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "grid",
+          placeItems: "center",
+          padding: 24,
+          textAlign: "center",
+        }}
+      >
+        <p className="hintline" style={{ maxWidth: "34ch" }}>
           Brak klucza Google Maps. Ustaw NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, aby włączyć mapę.
         </p>
       </div>
     );
   }
 
-  const centerSource = groupedMarkers.length > 0 ? groupedMarkers : markers;
+  const centerSource = groups.length > 0 ? groups : markers;
   const center =
     centerSource.length > 0
       ? { lat: centerSource[0].latitude, lng: centerSource[0].longitude }
-      : { lat: 52.069, lng: 19.48 }; // default: center of Poland
-  const defaultZoom = centerSource.length > 0 ? 12 : 6;
-
-  const statusOrder: MarkerPoint["status"][] = ["NEW", "ANALYSIS", "IN_PROGRESS", "RESOLVED"];
+      : { lat: 49.656, lng: 21.16 };
+  const zoom = centerSource.length > 0 ? 11 : 6;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {statusOrder.map((status) => (
-          <button
-            key={status}
-            type="button"
-            onClick={() =>
-              setEnabledStatuses((current) => ({
-                ...current,
-                [status]: !current[status],
-              }))
-            }
-            className={`cursor-pointer rounded-full border px-[15px] py-[9px] text-xs font-medium transition ${
-              enabledStatuses[status]
-                ? "border-border bg-card text-foreground"
-                : "border-border bg-muted text-muted-foreground"
-            }`}
+    <APIProvider apiKey={apiKey}>
+      <div className="reports-map">
+        <div className="reports-map-canvas">
+          <GoogleMap
+            defaultCenter={center}
+            defaultZoom={zoom}
+            mapId="reports-map"
+            gestureHandling="greedy"
+            disableDefaultUI
+            clickableIcons={false}
+            onClick={(event) => {
+              if (markerClickedRef.current) return;
+              const latLng = event.detail?.latLng;
+              if (!latLng) return;
+              setSelectedKey(null);
+              setClickedPoint({ lat: latLng.lat, lng: latLng.lng });
+            }}
           >
-            <span className="inline-flex items-center gap-2">
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  statusDotClass[status],
-                  enabledStatuses[status] ? "opacity-100" : "opacity-55"
-                )}
-              />
-              <span>{reportStatusLabel[status]} ({statusCounts[status]})</span>
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="h-96 overflow-hidden">
-      <APIProvider apiKey={apiKey}>
-        <GoogleMap
-          defaultCenter={center}
-          defaultZoom={defaultZoom}
-          mapId="reports-map"
-          onClick={(event) => {
-            if (markerClickedRef.current) return;
-            const latLng = event.detail?.latLng;
-            if (!latLng) return;
-            setSelectedGroupKey(null);
-            setClickedPoint({ lat: latLng.lat, lng: latLng.lng });
-          }}
-        >
-          {groupedMarkers.map((group) => (
-            <AdvancedMarker
-              key={group.key}
-              position={{ lat: group.latitude, lng: group.longitude }}
-              title={
-                group.reports.length > 1
-                  ? `${group.locationName} · ${group.reports.length} zgłoszeń`
-                  : `${group.locationName} · #${group.reports[0].id.substring(0, 8).toUpperCase()}`
+            {groups.map((group) => (
+              <AdvancedMarker
+                key={group.key}
+                position={{ lat: group.latitude, lng: group.longitude }}
+                title={
+                  group.reports.length > 1
+                    ? `${group.locationName} · ${group.reports.length} zgłoszeń`
+                    : `${group.locationName} · ${shortCode(group.reports[0].id)}`
+                }
+                onClick={() => {
+                  markerClickedRef.current = true;
+                  setSelectedKey(group.key);
+                  setTimeout(() => {
+                    markerClickedRef.current = false;
+                  }, 120);
+                }}
+              >
+                <span className={`pin-dot ${STATUS_META[group.dominantStatus].cls}`}>
+                  {group.reports.length > 1 ? group.reports.length : ""}
+                </span>
+              </AdvancedMarker>
+            ))}
+          </GoogleMap>
+        </div>
+
+        <div className="map-legend" role="group" aria-label="Filtry statusów">
+          {STATUS_ORDER.map((status) => (
+            <button
+              key={status}
+              type="button"
+              className="lg"
+              style={{ opacity: enabledStatuses[status] ? 1 : 0.45, background: "none", padding: 0 }}
+              aria-pressed={enabledStatuses[status]}
+              onClick={() =>
+                setEnabledStatuses((current) => ({ ...current, [status]: !current[status] }))
               }
-              clickable
-              onClick={() => {
-                markerClickedRef.current = true;
-                setSelectedGroupKey(group.key);
-                setTimeout(() => { markerClickedRef.current = false; }, 100);
-              }}
             >
-              <Pin
-                background={statusColor[group.dominantStatus]}
-                borderColor="#0f172a"
-                glyphColor="#ffffff"
-                glyph={group.reports.length > 1 ? String(group.reports.length) : undefined}
-              />
-            </AdvancedMarker>
+              <i style={{ background: `var(--${STATUS_META[status].cls})` }} />
+              {STATUS_META[status].label} ({statusCounts[status]})
+            </button>
           ))}
-          {selectedGroup ? (
-            <InfoWindow
-              position={{ lat: selectedGroup.latitude, lng: selectedGroup.longitude }}
-              onCloseClick={() => setSelectedGroupKey(null)}
-              headerContent={selectedGroup.locationName}
+        </div>
+
+        <div className="map-attrib">Kliknij w mapę, aby dodać zgłoszenie</div>
+
+        {selected ? (
+          <div className="map-callout">
+            <button
+              type="button"
+              className="iconbtn map-callout-close"
+              aria-label="Zamknij"
+              onClick={() => setSelectedKey(null)}
             >
-              <div className="min-w-56 space-y-2 p-1 text-sm">
-                {selectedGroup.reports.length === 1 ? (
-                  <>
-                    <p className="text-muted-foreground">
-                      ID zgłoszenia: #{selectedGroup.reports[0].id.substring(0, 8).toUpperCase()}
-                    </p>
-                    <div className={cn(reportStatusClass(selectedGroup.reports[0].status), "w-fit")}>{reportStatusLabel[selectedGroup.reports[0].status]}</div>
-                    <a
-                      href={`/reports/${selectedGroup.reports[0].id}`}
-                      className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                    >
-                      Przejdź do zgłoszenia
-                    </a>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-muted-foreground">Liczba zgłoszeń w punkcie: {selectedGroup.reports.length}</p>
-                    <div className="max-h-48 space-y-2 overflow-auto pr-1">
-                      {selectedGroup.reports.map((report) => (
-                        <div key={report.id} className="rounded-md border border-border bg-card px-2 py-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold text-foreground">#{report.id.substring(0, 8).toUpperCase()}</span>
-                            <span className={cn(reportStatusClass(report.status), "text-[10px]")}>{reportStatusLabel[report.status]}</span>
-                          </div>
-                          <a
-                            href={`/reports/${report.id}`}
-                            className="mt-2 inline-flex items-center text-xs font-semibold text-primary hover:underline"
-                          >
-                            Otwórz zgłoszenie
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </InfoWindow>
-          ) : null}
-        </GoogleMap>
+              <X size={15} />
+            </button>
+            <div className="mc-place">{selected.locationName}</div>
+            <div className="mc-meta">
+              {selected.reports.length === 1
+                ? `${shortCode(selected.reports[0].id)} · ${STATUS_META[selected.reports[0].status].label}`
+                : `${selected.reports.length} zgłoszeń w tym punkcie`}
+            </div>
+            <div className="mc-list">
+              {selected.reports.map((report) => (
+                <button
+                  key={report.id}
+                  type="button"
+                  className="mc-item"
+                  onClick={() => router.push(`/reports/${report.id}`)}
+                >
+                  <span className="mono">{shortCode(report.id)}</span>
+                  <span className={`pill ${STATUS_META[report.status].cls}`}>
+                    {STATUS_META[report.status].label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <MapReportDialog
           open={clickedPoint !== null}
           lat={clickedPoint?.lat ?? null}
@@ -257,11 +245,7 @@ export function ReportsMap({ markers }: Props) {
             router.refresh();
           }}
         />
-      </APIProvider>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Kliknij pinezkę, aby zobaczyć zgłoszenie. Kliknij w dowolne miejsce na mapie, aby dodać nowe zgłoszenie.
-      </p>
-    </div>
+    </APIProvider>
   );
 }

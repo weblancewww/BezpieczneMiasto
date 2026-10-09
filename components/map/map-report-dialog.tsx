@@ -1,18 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useMapsLibrary } from "@vis.gl/react-google-maps";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 
 type OrganizationItem = {
@@ -212,131 +204,148 @@ export function MapReportDialog({ open, lat, lng, onClose, onReportCreated }: Pr
     onClose();
   }
 
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) closeAndReset(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-auto">
-        <DialogHeader>
-          <DialogTitle>Dodaj zgłoszenie z mapy</DialogTitle>
-        </DialogHeader>
+  // Dialog jest otwierany wyłącznie w reakcji na klik użytkownika, więc portalu
+  // nie trzeba renderować na serwerze.
+  if (!open || typeof document === "undefined") {
+    return null;
+  }
 
-        {/* Location info */}
-        <div className="rounded-md border border-border bg-muted/60 p-3 text-sm space-y-1">
-          {isGeocoding ? (
-            <p className="text-muted-foreground">Pobieranie adresu…</p>
-          ) : address ? (
-            <>
-              <p className="font-medium text-foreground">{address}</p>
-              {matchedOrgName && (
-                <p className="text-muted-foreground text-xs">
-                  Organizacja:{" "}
-                  <span className="font-semibold text-foreground">{matchedOrgName}</span>
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-muted-foreground">
-              Współrzędne: {lat?.toFixed(6)}, {lng?.toFixed(6)}
-            </p>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="mr-name">Imię i nazwisko</Label>
-              <Input
-                id="mr-name"
-                value={formData.reporterName}
-                onChange={(e) =>
-                  setFormData((c) => ({ ...c, reporterName: e.target.value }))
-                }
-                required
-              />
+  return createPortal(
+    <div
+      className="modal open"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Dodaj zgłoszenie z mapy"
+    >
+      <div className="scrim" onClick={closeAndReset} aria-hidden="true" />
+      <div className="modal-card">
+            <div className="modal-head">
+              <div>
+                <h2>Dodaj zgłoszenie z mapy</h2>
+                <p>Zgłoszenie trafi automatycznie do właściwej jednostki.</p>
+              </div>
+              <button type="button" className="iconbtn" aria-label="Zamknij" onClick={closeAndReset}>
+                <X size={19} />
+              </button>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="mr-phone">Telefon</Label>
-              <Input
-                id="mr-phone"
-                type="tel"
-                value={formData.reporterPhone}
-                onChange={(e) =>
-                  setFormData((c) => ({ ...c, reporterPhone: e.target.value }))
-                }
-                required
-              />
-            </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="mr-email">Email</Label>
-            <Input
-              id="mr-email"
-              type="email"
-              value={formData.reporterEmail}
-              onChange={(e) =>
-                setFormData((c) => ({ ...c, reporterEmail: e.target.value }))
-              }
-              required
-            />
-          </div>
+            <div className="modal-body stack" style={{ gap: 16 }}>
+              <div
+                style={{
+                  border: "1px solid var(--hairline)",
+                  borderRadius: "var(--radius)",
+                  background: "var(--surface-2)",
+                  padding: "14px 16px",
+                  fontSize: 13.5,
+                }}
+              >
+                {isGeocoding ? (
+                  <span className="hintline">Pobieranie adresu…</span>
+                ) : address ? (
+                  <>
+                    <div style={{ fontWeight: 600 }}>{address}</div>
+                    {matchedOrgName ? (
+                      <div className="hintline" style={{ marginTop: 4 }}>
+                        Organizacja:{" "}
+                        <strong style={{ color: "var(--accent)" }}>{matchedOrgName}</strong>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="hintline num">
+                    Współrzędne: {lat?.toFixed(6)}, {lng?.toFixed(6)}
+                  </span>
+                )}
+              </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="mr-desc">Opis problemu</Label>
-            <Textarea
-              id="mr-desc"
-              rows={3}
-              value={formData.description}
-              onChange={(e) =>
-                setFormData((c) => ({ ...c, description: e.target.value }))
-              }
-              placeholder="Opisz problem…"
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="mr-photos">Zdjęcia (opcjonalnie)</Label>
-            <Input
-              id="mr-photos"
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => setPhotoFiles(Array.from(e.target.files ?? []))}
-            />
-          </div>
-
-          {photoPreviewUrls.length > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              {photoPreviewUrls.map((url, i) => (
-                <div key={url} className="rounded-md border border-border overflow-hidden">
-                  <Image
-                    src={url}
-                    alt={`Podgląd ${i + 1}`}
-                    width={160}
-                    height={112}
-                    unoptimized
-                    className="h-24 w-full object-cover"
-                  />
+              <form onSubmit={handleSubmit} className="stack" style={{ gap: 16 }}>
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="mr-name">Imię i nazwisko</label>
+                    <input
+                      id="mr-name"
+                      className="input"
+                      value={formData.reporterName}
+                      onChange={(e) => setFormData((c) => ({ ...c, reporterName: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="mr-phone">Telefon</label>
+                    <input
+                      id="mr-phone"
+                      className="input"
+                      type="tel"
+                      value={formData.reporterPhone}
+                      onChange={(e) => setFormData((c) => ({ ...c, reporterPhone: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="field full">
+                    <label htmlFor="mr-email">E-mail</label>
+                    <input
+                      id="mr-email"
+                      className="input"
+                      type="email"
+                      value={formData.reporterEmail}
+                      onChange={(e) => setFormData((c) => ({ ...c, reporterEmail: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="field full">
+                    <label htmlFor="mr-desc">Opis problemu</label>
+                    <textarea
+                      id="mr-desc"
+                      className="textarea"
+                      rows={3}
+                      value={formData.description}
+                      onChange={(e) => setFormData((c) => ({ ...c, description: e.target.value }))}
+                      placeholder="Opisz problem…"
+                      required
+                    />
+                  </div>
+                  <div className="field full">
+                    <label htmlFor="mr-photos">Zdjęcia (opcjonalnie)</label>
+                    <input
+                      id="mr-photos"
+                      className="input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => setPhotoFiles(Array.from(e.target.files ?? []))}
+                    />
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
 
-          <div className="flex gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={closeAndReset}
-            >
-              Anuluj
-            </Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting}>
-              {isSubmitting ? "Wysyłanie…" : "Dodaj zgłoszenie"}
-            </Button>
+                {photoPreviewUrls.length > 0 && (
+                  <div className="thumbs">
+                    {photoPreviewUrls.map((url, i) => (
+                      <div key={url} className="thumb">
+                        <Image
+                          src={url}
+                          alt={`Podgląd ${i + 1}`}
+                          width={160}
+                          height={160}
+                          unoptimized
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="inline justify-end">
+                  <button type="button" className="btn btn-secondary" onClick={closeAndReset}>
+                    Anuluj
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? "Wysyłanie…" : "Dodaj zgłoszenie"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+      </div>,
+    document.body
   );
 }

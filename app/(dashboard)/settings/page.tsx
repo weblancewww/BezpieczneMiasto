@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 type CurrentUser = {
@@ -50,12 +46,9 @@ export default function SettingsPage() {
         setProfileForm((current) => ({ ...current, name: data.name }));
         setSmtpTestRecipient(data.email);
       } catch (error) {
-        if (!active) {
-          return;
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "Błąd ładowania");
         }
-
-        const message = error instanceof Error ? error.message : "Błąd ładowania";
-        toast.error(message);
       } finally {
         if (active) {
           setIsLoading(false);
@@ -91,8 +84,7 @@ export default function SettingsPage() {
       setProfileForm({ name: result.user.name, currentPassword: "", newPassword: "" });
       toast.success("Profil został zaktualizowany");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd zapisu";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd zapisu");
     } finally {
       setIsSavingProfile(false);
     }
@@ -116,32 +108,25 @@ export default function SettingsPage() {
 
       toast.success("Wysłano wiadomość testową SMTP");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Błąd testu SMTP";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Błąd testu SMTP");
     } finally {
       setIsTestingSmtp(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-slate-900">Ustawienia</h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Profil</CardTitle>
-          <CardDescription>
-            {isLoading
-              ? "Ładowanie danych użytkownika..."
-              : `${user?.email || ""} · ${user?.organization?.name || ""}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={saveProfile} className="space-y-4 max-w-xl">
-            <div className="space-y-2">
-              <Label htmlFor="profile-name">Imię i nazwisko</Label>
-              <Input
+    <div className="grid-2">
+      <div className="card">
+        <div className="card-head">
+          <h2>Profil administratora</h2>
+        </div>
+        <div className="card-body">
+          <form onSubmit={saveProfile} className="stack" style={{ gap: 16 }}>
+            <div className="field">
+              <label htmlFor="profile-name">Imię i nazwisko</label>
+              <input
                 id="profile-name"
+                className="input"
                 value={profileForm.name}
                 onChange={(event) =>
                   setProfileForm((current) => ({ ...current, name: event.target.value }))
@@ -150,11 +135,24 @@ export default function SettingsPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-current-password">Aktualne hasło</Label>
-              <Input
+            <div className="field">
+              <label htmlFor="profile-email">Adres e-mail</label>
+              <input
+                id="profile-email"
+                className="input"
+                value={user?.email ?? ""}
+                readOnly
+                disabled
+              />
+            </div>
+            <hr className="rule" />
+            <div className="field">
+              <label htmlFor="profile-current-password">Aktualne hasło</label>
+              <input
                 id="profile-current-password"
+                className="input"
                 type="password"
+                placeholder="••••••••"
                 value={profileForm.currentPassword}
                 onChange={(event) =>
                   setProfileForm((current) => ({ ...current, currentPassword: event.target.value }))
@@ -162,51 +160,86 @@ export default function SettingsPage() {
                 disabled={isLoading}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-new-password">Nowe hasło</Label>
-              <Input
+            <div className="field">
+              <label htmlFor="profile-new-password">Nowe hasło</label>
+              <input
                 id="profile-new-password"
+                className="input"
                 type="password"
+                placeholder="••••••••"
                 value={profileForm.newPassword}
                 onChange={(event) =>
                   setProfileForm((current) => ({ ...current, newPassword: event.target.value }))
                 }
                 disabled={isLoading}
               />
-              <p className="text-xs text-slate-500">
+              <span className="hintline">
                 Pozostaw puste, jeśli nie chcesz zmieniać hasła.
-              </p>
+              </span>
             </div>
-            <Button type="submit" disabled={isLoading || isSavingProfile}>
-              {isSavingProfile ? "Zapisywanie..." : "Zapisz profil"}
-            </Button>
+            <div className="inline justify-end">
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isLoading || isSavingProfile}
+              >
+                {isSavingProfile ? "Zapisywanie…" : "Zapisz profil"}
+              </button>
+            </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Konfiguracja SMTP</CardTitle>
-          <CardDescription>
-            Test opiera się na aktualnych zmiennych środowiskowych SMTP aplikacji.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 max-w-xl">
-          <div className="space-y-2">
-            <Label htmlFor="smtp-test-recipient">Adres testowy</Label>
-            <Input
-              id="smtp-test-recipient"
-              type="email"
-              value={smtpTestRecipient}
-              onChange={(event) => setSmtpTestRecipient(event.target.value)}
-              required
-            />
+      <div className="card">
+        <div className="card-head">
+          <h2>Konfiguracja SMTP</h2>
+        </div>
+        <div className="card-body">
+          <div className="stack" style={{ gap: 16 }}>
+            <p className="hintline">
+              Test opiera się na aktualnych zmiennych środowiskowych SMTP aplikacji.
+            </p>
+            <div className="field">
+              <label htmlFor="smtp-test-recipient">Adres testowy</label>
+              <input
+                id="smtp-test-recipient"
+                className="input"
+                type="email"
+                placeholder="adres@example.com"
+                value={smtpTestRecipient}
+                onChange={(event) => setSmtpTestRecipient(event.target.value)}
+                required
+              />
+            </div>
+            <div className="inline justify-end">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={testSmtp}
+                disabled={isTestingSmtp || !smtpTestRecipient}
+              >
+                {isTestingSmtp ? "Wysyłanie…" : "Wyślij test SMTP"}
+              </button>
+            </div>
+            <div
+              style={{
+                padding: "12px 14px",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                background: "var(--bg)",
+                fontSize: 12.5,
+                color: "var(--muted)",
+              }}
+            >
+              <strong style={{ color: "var(--fg)" }}>Organizacja: </strong>
+              {user?.organization?.name ?? "—"}
+              <br />
+              <strong style={{ color: "var(--fg)" }}>Rola: </strong>
+              {user?.role ?? "—"}
+            </div>
           </div>
-          <Button onClick={testSmtp} disabled={isTestingSmtp || !smtpTestRecipient}>
-            {isTestingSmtp ? "Wysyłanie..." : "Wyślij test SMTP"}
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

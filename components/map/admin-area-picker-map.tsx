@@ -5,7 +5,6 @@ import {
   APIProvider,
   AdvancedMarker,
   Map as GoogleMap,
-  Pin,
   type MapMouseEvent,
   useMapsLibrary,
 } from "@vis.gl/react-google-maps";
@@ -144,46 +143,48 @@ function AdminAreaMapInner({ value, onChange }: Props) {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+    <div className="stack" style={{ gap: 12 }}>
+      <div className="inline">
         <button
           type="button"
           onClick={() => setEnablePowiat((current) => !current)}
-          className={`rounded-full border px-3 py-1 text-xs ${enablePowiat ? "bg-orange-100 border-orange-300 text-orange-900" : "bg-white border-slate-300 text-slate-600"}`}
+          className={`chip${enablePowiat ? " active" : ""}`}
         >
-          Powiaty {enablePowiat ? "ON" : "OFF"}
+          Powiaty {enablePowiat ? "wł." : "wył."}
         </button>
         <button
           type="button"
           onClick={() => setEnableGmina((current) => !current)}
-          className={`rounded-full border px-3 py-1 text-xs ${enableGmina ? "bg-blue-100 border-blue-300 text-blue-900" : "bg-white border-slate-300 text-slate-600"}`}
+          className={`chip${enableGmina ? " active" : ""}`}
         >
-          Gminy {enableGmina ? "ON" : "OFF"}
+          Gminy {enableGmina ? "wł." : "wył."}
         </button>
       </div>
 
-      <div className="rounded overflow-hidden h-72 border border-slate-200">
+      <div className="map-picker" style={{ minHeight: 240 }}>
         <GoogleMap
           defaultCenter={coords}
           defaultZoom={6}
           mapId="organization-admin-area-map"
           gestureHandling="greedy"
+          disableDefaultUI
+          clickableIcons={false}
           onClick={handleMapClick}
         >
           <AdvancedMarker position={coords} title="Ostatnio wybrany punkt">
-            <Pin background="#0f766e" borderColor="#0f172a" glyphColor="#ffffff" />
+            <span className="pin-dot accent" />
           </AdvancedMarker>
         </GoogleMap>
       </div>
 
       {selectedAreas.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="inline">
           {selectedAreas.map((area) => (
             <button
               key={area.key}
               type="button"
               onClick={() => removeArea(area.key)}
-              className={`rounded-full border px-3 py-1 text-xs ${area.type === "POWIAT" ? "bg-orange-50 border-orange-300 text-orange-900" : "bg-blue-50 border-blue-300 text-blue-900"}`}
+              className={`tag ${area.type === "POWIAT" ? "type-POWIAT" : "type-GMINA"}`}
             >
               {area.type === "POWIAT" ? "Powiat" : "Gmina"}: {area.name} ×
             </button>
@@ -191,11 +192,12 @@ function AdminAreaMapInner({ value, onChange }: Props) {
         </div>
       ) : null}
 
-      <p className="text-xs text-muted-foreground">
-        {isResolving ? "Pobieranie obszaru administracyjnego..." : hint}
+      <p className="hintline">
+        {isResolving ? "Pobieranie obszaru administracyjnego…" : hint}
       </p>
-      <p className="text-xs text-muted-foreground">
-        Każde kliknięcie może dodać gminę, powiat albo oba typy jednocześnie. Kliknij chip poniżej mapy, aby usunąć wybrany obszar.
+      <p className="hintline">
+        Każde kliknięcie może dodać gminę, powiat albo oba typy jednocześnie. Kliknij chip poniżej
+        mapy, aby usunąć wybrany obszar.
       </p>
     </div>
   );
@@ -206,10 +208,11 @@ export function AdminAreaPickerMap({ value, onChange }: Props) {
 
   if (!apiKey) {
     return (
-      <div className="bg-slate-100 rounded h-40 flex items-center justify-center px-6 text-center">
-        <p className="text-slate-600">
-          Brak klucza Google Maps. Ustaw NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, aby wybierać obszar na mapie.
-        </p>
+      <div className="photo-empty">
+        <span>
+          Brak klucza Google Maps. Ustaw NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, aby wybierać obszar na
+          mapie.
+        </span>
       </div>
     );
   }
