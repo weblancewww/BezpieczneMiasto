@@ -21,6 +21,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+# `prisma/seed.ts` importuje `../lib/demo-seed`, więc moduły z `lib/` muszą być
+# obecne w obrazie runtime — nie trafiają do `.next`, bo nie są częścią aplikacji.
+COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3000

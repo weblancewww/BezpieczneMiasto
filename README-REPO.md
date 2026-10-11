@@ -30,16 +30,22 @@ Jeśli chcesz wrzucić repo na GitHub:
 
 1. Wgraj repo na GitHub/GitLab.
 2. W Coolify wybierz New Resource -> Application -> From Git Repository.
-3. Ustaw gałąź (np. `main`) i typ builda: Nixpacks (Node).
-4. Ustaw komendy:
-	- Install Command: `npm ci`
-	- Build Command: `npm run build`
-	- Start Command: `npm run db:deploy && npm run start`
-5. Ustaw port aplikacji: `3000`.
-6. Dodaj domenę i HTTPS (Coolify/Traefik).
-7. Dodaj wszystkie zmienne środowiskowe z pliku `.env.example`.
-8. Dodaj Persistent Volume mapowany do ścieżki `/app/public/uploads`.
-9. Wykonaj pierwszy deploy.
+3. Ustaw gałąź (np. `main`) i sposób budowania: **Docker Compose** — repo zawiera
+	`docker-compose.yml`, z którego Coolify uruchomi dwa kontenery: `app` oraz `db`.
+4. Nie ustawiaj własnych komend startowych. Kontener `app` ma entrypoint
+	(`docker-entrypoint.sh`), który sam synchronizuje schemat bazy, a przy pierwszym
+	starcie wypełnia ją danymi demonstracyjnymi.
+5. **Nie używaj `npm run db:deploy`.** Projekt nie ma katalogu `prisma/migrations`,
+	więc `prisma migrate deploy` nie ma czego wdrożyć, a na niepustej bazie kończy się
+	błędem `P3005`. Schemat jest utrzymywany przez `prisma db push` w entrypoincie.
+6. Ustaw port aplikacji: `3000`.
+7. Dodaj domenę i HTTPS (Coolify/Traefik).
+8. Dodaj zmienne środowiskowe wg `.env.example`. Klucz
+	`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` oznacz jako **Build Variable** — jest on
+	wbudowywany w aplikację na etapie budowania, więc jako zwykła zmienna runtime
+	trafi tylko do serwera i mapa w przeglądarce się nie pojawi.
+9. Dodaj Persistent Volume mapowany do ścieżki `/app/public/uploads`.
+10. Wykonaj pierwszy deploy.
 
 ## Docker Compose (lokalnie lub na VPS)
 
@@ -54,7 +60,8 @@ Jeśli chcesz wrzucić repo na GitHub:
 
 1. Uruchamia MariaDB w kontenerze `db`.
 2. Buduje i uruchamia aplikację Next.js w kontenerze `app`.
-3. Przy starcie aplikacji wykonuje migracje Prisma (`npm run db:deploy`).
+3. Przy starcie aplikacji synchronizuje schemat bazy (`prisma db push`) i przy
+   pierwszym uruchomieniu zasila ją danymi demonstracyjnymi.
 4. Zachowuje dane bazy i uploady w trwałych wolumenach Docker.
 5. Sama komenda `docker compose` nie pobiera repo z GitHuba. Repo pobiera Coolify albo robisz `git clone`, a compose uruchamia już lokalny checkout.
 
