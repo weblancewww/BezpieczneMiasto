@@ -35,7 +35,8 @@ model Organization {
   slug             String         @unique
   type             OrganizationType
   description      String?        @db.Text
-  adminArea        String?        @db.Text  // Comma-separated territory names (gmina/powiat) for geo-assignment
+  adminArea        String?        @db.Text  // Comma-separated territory names (gmina/powiat) – fallback for geo-assignment
+  boundary         Json?                    // GeoJSON MultiPolygon with [lng, lat] rings – primary source for geo-assignment
   parentId         String?        // Self-relation for hierarchy
   parent           Organization?  @relation("ParentOrg", fields: [parentId], references: [id], onDelete: SetNull)
   children         Organization[] @relation("ParentOrg")
@@ -89,8 +90,10 @@ model Report {
   id               String         @id @default(cuid())
   locationId       String?
   location         Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  organizationId   String
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Null = report is outside every configured boundary (unassigned queue)
+  organizationId   String?
+  organization     Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  assignedManually Boolean        @default(false)
   reportLatitude   Float?
   reportLongitude  Float?
   reportAddress    String?
@@ -150,4 +153,21 @@ model StatusHistory {
 
   @@index([reportId])
   @@index([changedById])
+}
+
+// Konfiguracja poczty (SMTP) — edytowana z panelu, nie ze zmiennych środowiskowych.
+// Trzymamy jeden wiersz o stałym id, żeby nie mnożyć konfiguracji.
+model SmtpSetting {
+  id        Int      @id @default(1)
+  host      String   @default("")
+  port      Int      @default(587)
+  secure    Boolean  @default(false)
+  username  String   @default("")
+  // Hasło SMTP musi dać się odtworzyć, żeby uwierzytelnić się w serwerze —
+  // nie da się go trzymać jako skrót. Stąd zwykły tekst w bazie.
+  password  String   @default("") @db.Text
+  fromEmail String   @default("")
+  fromName  String   @default("")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }

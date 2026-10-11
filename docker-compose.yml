@@ -39,6 +39,9 @@ services:
             NEXTAUTH_URL: ${NEXTAUTH_URL}
             NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
             NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+            # Poczta jest konfigurowana w panelu (Ustawienia → Konfiguracja poczty)
+            # i trzymana w bazie. Poniższe zmienne to wyłącznie wartości startowe,
+            # używane dopóki w bazie nie ma zapisanej konfiguracji.
             SMTP_HOST: ${SMTP_HOST}
             SMTP_PORT: ${SMTP_PORT}
             SMTP_USER: ${SMTP_USER}

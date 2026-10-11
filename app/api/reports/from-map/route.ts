@@ -2,8 +2,12 @@ import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 import { sendReportConfirmation } from "@/lib/email";
+import {
+  findOrganizationForPoint,
+  parseBoundary,
+  type OrganizationBoundary,
+} from "@/lib/geo";
 
 export const runtime = "nodejs";
 
@@ -40,23 +44,12 @@ async function savePhotos(reportId: string, photos: File[]) {
   return savedPhotos;
 }
 
-function normalizeStr(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-
     const formData = await request.formData();
     const lat = Number(formData.get("lat") || "");
     const lng = Number(formData.get("lng") || "");
     const address = String(formData.get("address") || "").trim();
-    const geocodedAreasRaw = String(formData.get("geocodedAreas") || "[]");
     const reporterName = String(formData.get("reporterName") || "").trim();
     const reporterEmail = String(formData.get("reporterEmail") || "").trim();
     const reporterPhone = String(formData.get("reporterPhone") || "").trim();
@@ -76,59 +69,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Brak wymaganych danych zgłoszenia" }, { status: 400 });
     }
 
-    let geocodedAreas: string[] = [];
-    try {
-      const parsed = JSON.parse(geocodedAreasRaw);
-      if (Array.isArray(parsed)) {
-        geocodedAreas = parsed.map(String);
-      }
-    } catch {
-      geocodedAreas = [];
-    }
+    // Przypisanie wyłącznie po geometrii granic. Brak dopasowania =
+    // zgłoszenie nieprzypisane (organizationId = null) i trafia do kolejki
+    // widocznej dla Super Admina.
+    //
+    // Świadomie NIE ma tu dopasowania po nazwach ani fallbacku na pierwszą
+    // organizację z listy — to właśnie ten fallback sprawiał, że zgłoszenie
+    // z Krakowa czy Łącka lądowało w Powiecie Gorlickim.
+    const allOrganizations = await prisma.organization.findMany({
+      select: { id: true, name: true, type: true, boundary: true },
+    });
 
-    // If user is logged in and scoped to an organization, prefer their scope.
-    // For public submissions, match against all organizations.
-    const restrictedScope =
-      session?.user?.organizationId && session.user.role !== "SUPER_ADMIN"
-        ? {
-            OR: [
-              { id: session.user.organizationId },
-              { parentId: session.user.organizationId },
-            ],
-          }
-        : {};
+    const boundaries: OrganizationBoundary[] = allOrganizations.flatMap((organization) => {
+      const boundary = parseBoundary(organization.boundary);
 
-    let candidateOrgs = await prisma.organization.findMany({ where: restrictedScope });
+      if (!boundary) return [];
 
-    if (candidateOrgs.length === 0 && Object.keys(restrictedScope).length > 0) {
-      candidateOrgs = await prisma.organization.findMany();
-    }
+      return [
+        {
+          id: organization.id,
+          name: organization.name,
+          type: organization.type,
+          boundary,
+        },
+      ];
+    });
 
-    const normAreas = geocodedAreas.map(normalizeStr);
-
-    function matchesOrgArea(adminArea: string | null): boolean {
-      if (!adminArea) return false;
-      const orgAreas = adminArea.split(",").map(normalizeStr);
-      return normAreas.some((ga) =>
-        orgAreas.some((oa) => oa.includes(ga) || ga.includes(oa))
-      );
-    }
-
-    // Prefer GMINA over POWIAT for specificity
-    const gminaMatch = candidateOrgs.find(
-      (org) => org.type === "GMINA" && matchesOrgArea(org.adminArea)
-    );
-    const powiatMatch = candidateOrgs.find(
-      (org) => org.type === "POWIAT" && matchesOrgArea(org.adminArea)
-    );
-    const bestOrg = gminaMatch ?? powiatMatch ?? candidateOrgs[0];
-
-    if (!bestOrg) {
-      return NextResponse.json(
-        { error: "Brak dostępnych organizacji do przypisania zgłoszenia" },
-        { status: 400 }
-      );
-    }
+    const bestOrg = findOrganizationForPoint(boundaries, lat, lng);
 
     const pointName = address || `Punkt (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
 
@@ -139,7 +106,7 @@ export async function POST(request: NextRequest) {
       const report = await prisma.report.create({
         data: {
           id: reportId,
-          organizationId: bestOrg.id,
+          organizationId: bestOrg?.id ?? null,
           reportLatitude: lat,
           reportLongitude: lng,
           reportAddress: address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
@@ -166,12 +133,18 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await sendReportConfirmation(
-          reporterEmail,
+        await sendReportConfirmation(reporterEmail, {
+          reportNumber: getReportNumber(report.id),
           reporterName,
-          pointName,
-          getReportNumber(report.id)
-        );
+          placeName: pointName,
+          address: address || null,
+          latitude: lat,
+          longitude: lng,
+          description,
+          organizationName: bestOrg?.name ?? null,
+          createdAt: report.createdAt,
+          photoCount: savedPhotos.length,
+        });
       } catch (emailError) {
         console.error("Email sending failed:", emailError);
       }
@@ -181,7 +154,8 @@ export async function POST(request: NextRequest) {
           success: true,
           reportId: report.id,
           reportNumber: getReportNumber(report.id),
-          organizationName: bestOrg.name,
+          organizationName: bestOrg?.name ?? null,
+          assigned: Boolean(bestOrg),
         },
         { status: 201 }
       );

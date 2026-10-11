@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getOrganizationScopeIds } from "@/lib/org-scope";
 
 export const runtime = "nodejs";
 
@@ -20,10 +21,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const where =
-      session.user.role === "SUPER_ADMIN"
-        ? {}
-        : { organizationId: session.user.organizationId };
+    const scopeIds = await getOrganizationScopeIds(session.user);
+
+    // Admin powiatu widzi też lokalizacje podległych gmin.
+    const where = scopeIds ? { organizationId: { in: scopeIds } } : {};
 
     const locations = await prisma.location.findMany({
       where,

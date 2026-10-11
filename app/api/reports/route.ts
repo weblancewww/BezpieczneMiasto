@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendReportConfirmation } from "@/lib/email";
 import { auth } from "@/lib/auth";
+import { getOrganizationScopeIds } from "@/lib/org-scope";
 
 export const runtime = "nodejs";
 
@@ -98,6 +99,8 @@ export async function POST(request: NextRequest) {
 
     const location = await prisma.location.findUnique({
       where: { qrToken },
+      // Nazwa jednostki trafia do maila potwierdzającego.
+      include: { organization: { select: { name: true } } },
     });
 
     if (!location) {
@@ -142,12 +145,18 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await sendReportConfirmation(
-          reporterEmail,
+        await sendReportConfirmation(reporterEmail, {
+          reportNumber: getReportNumber(report.id),
           reporterName,
-          location.name,
-          getReportNumber(report.id)
-        );
+          placeName: location.name,
+          address: location.address,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          description,
+          organizationName: location.organization?.name ?? null,
+          createdAt: report.createdAt,
+          photoCount: savedPhotos.length,
+        });
       } catch (emailError) {
         console.error("Email sending failed:", emailError);
       }
@@ -187,15 +196,19 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const where =
-      session.user.role === "SUPER_ADMIN"
-        ? {}
-        : { organizationId: session.user.organizationId };
+    const scopeIds = await getOrganizationScopeIds(session.user);
+
+    /* null = SUPER_ADMIN (bez ograniczeń). Admin powiatu dostaje też zgłoszenia
+       podległych gmin — inaczej widziałby tylko te przypisane wprost do powiatu. */
+    const where = scopeIds ? { organizationId: { in: scopeIds } } : {};
 
     const reports = await prisma.report.findMany({
       where,
       include: {
         location: true,
+        organization: {
+          select: { id: true, name: true },
+        },
         photos: true,
         statusHistories: {
           orderBy: { createdAt: "desc" },

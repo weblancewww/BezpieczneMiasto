@@ -324,7 +324,12 @@ function WizardInner({ mode, qrToken, initialLocation }: Props) {
           <p className="hintline" style={{ marginTop: -6, marginBottom: 18 }}>
             Jednostka: {ticket.organization}
           </p>
-        ) : null}
+        ) : (
+          <p className="hintline" style={{ marginTop: -6, marginBottom: 18 }}>
+            Punkt leży poza skonfigurowanymi granicami — zgłoszenie zostanie przypisane do
+            właściwej jednostki przez administratora.
+          </p>
+        )}
         <div className="statuscard">
           <div className="sc-head">
             <b>Przebieg zgłoszenia</b>

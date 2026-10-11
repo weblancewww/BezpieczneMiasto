@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Building2, Check, Landmark, MapPin, Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { AdminAreaPickerMap } from "@/components/map/admin-area-picker-map";
+import { BoundaryEditorMap } from "@/components/map/boundary-editor-map";
+import { parseBoundary, type Boundary } from "@/lib/geo";
 
 type OrganizationRow = {
   id: string;
@@ -13,6 +14,7 @@ type OrganizationRow = {
   parentId: string | null;
   description: string | null;
   adminArea: string | null;
+  boundary: unknown;
   _count: {
     users: number;
     locations: number;
@@ -26,6 +28,8 @@ export default function OrganizationsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editingAreaOrgId, setEditingAreaOrgId] = useState<string | null>(null);
   const [editingAreaValue, setEditingAreaValue] = useState("");
+  const [editingAreaBoundary, setEditingAreaBoundary] = useState<Boundary | null>(null);
+  const [formBoundary, setFormBoundary] = useState<Boundary | null>(null);
   const [isAreaSaving, setIsAreaSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -70,7 +74,17 @@ export default function OrganizationsPage() {
     };
   }, []);
 
-  const roots = useMemo(() => organizations.filter((org) => !org.parentId), [organizations]);
+  /* Korzeniem jest organizacja, która nie ma rodzica ALBO której rodzic nie jest
+     widoczny dla użytkownika. Bez tego drugiego warunku administrator gminy
+     (widzi tylko własną jednostkę, a jej rodzicem jest powiat) dostawał pustą
+     listę „Brak organizacji", bo żadna organizacja nie miała braku rodzica. */
+  const roots = useMemo(() => {
+    const visibleIds = new Set(organizations.map((org) => org.id));
+
+    return organizations.filter(
+      (org) => !org.parentId || !visibleIds.has(org.parentId)
+    );
+  }, [organizations]);
 
   const byParent = useMemo(() => {
     const map = new Map<string, OrganizationRow[]>();
@@ -100,6 +114,7 @@ export default function OrganizationsPage() {
           ...formData,
           parentId: formData.parentId || undefined,
           slug: formData.slug.trim().toLowerCase(),
+          boundary: formBoundary,
         }),
       });
 
@@ -118,6 +133,7 @@ export default function OrganizationsPage() {
         description: "",
         adminArea: "",
       });
+      setFormBoundary(null);
       setIsModalOpen(false);
       toast.success("Organizacja została utworzona");
     } catch (error) {
@@ -134,7 +150,7 @@ export default function OrganizationsPage() {
       const response = await fetch(`/api/organizations/${organizationId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminArea: editingAreaValue }),
+        body: JSON.stringify({ adminArea: editingAreaValue, boundary: editingAreaBoundary }),
       });
 
       const result = await response.json();
@@ -146,7 +162,11 @@ export default function OrganizationsPage() {
       setOrganizations((current) =>
         current.map((org) =>
           org.id === organizationId
-            ? { ...org, adminArea: result.organization.adminArea }
+            ? {
+                ...org,
+                adminArea: result.organization.adminArea,
+                boundary: result.organization.boundary,
+              }
             : org
         )
       );
@@ -154,6 +174,7 @@ export default function OrganizationsPage() {
       toast.success("Obszar organizacji zaktualizowany");
       setEditingAreaOrgId(null);
       setEditingAreaValue("");
+      setEditingAreaBoundary(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Błąd zapisu obszaru");
     } finally {
@@ -188,6 +209,11 @@ export default function OrganizationsPage() {
                 {org.adminArea}
               </div>
             ) : null}
+            <div className="n-desc">
+              {parseBoundary(org.boundary)
+                ? "Granica: ustawiona"
+                : "Granica: brak — zgłoszenia z tego obszaru trafią do nieprzypisanych"}
+            </div>
           </span>
           <span className="n-meta">
             {org._count.users} kont · {org._count.locations} lok.
@@ -199,9 +225,11 @@ export default function OrganizationsPage() {
               if (isEditing) {
                 setEditingAreaOrgId(null);
                 setEditingAreaValue("");
+                setEditingAreaBoundary(null);
               } else {
                 setEditingAreaOrgId(org.id);
                 setEditingAreaValue(org.adminArea || "");
+                setEditingAreaBoundary(parseBoundary(org.boundary));
               }
             }}
           >
@@ -213,16 +241,25 @@ export default function OrganizationsPage() {
           <div style={{ padding: "4px 22px 20px 74px" }}>
             <div className="stack" style={{ gap: 12 }}>
               <div className="field">
-                <label htmlFor={`area-${org.id}`}>Obszar organizacji</label>
+                <label htmlFor={`area-${org.id}`}>Granica obszaru (decyduje o przypisaniu zgłoszeń)</label>
+                <BoundaryEditorMap
+                  value={editingAreaBoundary}
+                  onChange={setEditingAreaBoundary}
+                  height={300}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor={`area-names-${org.id}`}>
+                  Nazwy obszaru <span className="hintline">(opcjonalnie, tylko informacyjnie)</span>
+                </label>
                 <input
-                  id={`area-${org.id}`}
+                  id={`area-names-${org.id}`}
                   className="input"
                   value={editingAreaValue}
                   onChange={(event) => setEditingAreaValue(event.target.value)}
                   placeholder="np. Gmina Gorlice, Powiat Gorlicki"
                 />
               </div>
-              <AdminAreaPickerMap value={editingAreaValue} onChange={setEditingAreaValue} />
               <div className="inline justify-end">
                 <button
                   type="button"
@@ -230,6 +267,7 @@ export default function OrganizationsPage() {
                   onClick={() => {
                     setEditingAreaOrgId(null);
                     setEditingAreaValue("");
+                    setEditingAreaBoundary(null);
                   }}
                 >
                   Anuluj
@@ -366,7 +404,21 @@ export default function OrganizationsPage() {
                       </select>
                     </div>
                     <div className="field full">
-                      <label htmlFor="org-admin-area">Obszar (gminy/powiaty do auto-przypisania)</label>
+                      <label>Granica obszaru (decyduje o przypisaniu zgłoszeń)</label>
+                      <BoundaryEditorMap
+                        value={formBoundary}
+                        onChange={setFormBoundary}
+                        height={300}
+                      />
+                      <span className="hintline">
+                        Narysuj granicę gminy lub powiatu albo wklej GeoJSON. Punkt leżący w tej
+                        granicy zostanie automatycznie przypisany do tej organizacji.
+                      </span>
+                    </div>
+                    <div className="field full">
+                      <label htmlFor="org-admin-area">
+                        Nazwy obszaru <span className="hintline">(opcjonalnie, tylko informacyjnie)</span>
+                      </label>
                       <input
                         id="org-admin-area"
                         className="input"
@@ -374,16 +426,6 @@ export default function OrganizationsPage() {
                         value={formData.adminArea}
                         onChange={(event) =>
                           setFormData((current) => ({ ...current, adminArea: event.target.value }))
-                        }
-                      />
-                      <span className="hintline">
-                        Nazwy oddzielone przecinkami – używane do automatycznego dopasowania zgłoszeń
-                        z mapy.
-                      </span>
-                      <AdminAreaPickerMap
-                        value={formData.adminArea}
-                        onChange={(value) =>
-                          setFormData((current) => ({ ...current, adminArea: value }))
                         }
                       />
                     </div>

@@ -4,7 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Camera, MapPin } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isWithinOrganizationScope } from "@/lib/org-scope";
 import { StatusForm } from "@/components/reports/status-form";
+import { AssignOrganization } from "@/components/reports/assign-organization";
 import type { ReportStatus } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -66,17 +68,16 @@ export default async function ReportDetailsPage(props: {
     notFound();
   }
 
-  if (
-    session.user.role !== "SUPER_ADMIN" &&
-    report.organizationId !== session.user.organizationId
-  ) {
+  /* Powiat widzi zgłoszenia podległych gmin, więc szczegóły muszą dopuszczać
+     cały zakres — inaczej lista pokazuje wiersze, które kończą się 404. */
+  if (!(await isWithinOrganizationScope(session.user, report.organizationId))) {
     notFound();
   }
 
   const placeName = report.reportPlaceName || report.location?.name || "Punkt zgłoszenia";
   const placeAddress = report.reportAddress || report.location?.address || "Brak adresu";
-  const orgName = report.organization?.name || report.location?.organization?.name || "Brak organizacji";
   const status = report.status as ReportStatus;
+  const canAssign = session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN";
 
   return (
     <>
@@ -116,7 +117,14 @@ export default async function ReportDetailsPage(props: {
                 <dt>Adres</dt>
                 <dd>{placeAddress}</dd>
                 <dt>Jednostka</dt>
-                <dd>{orgName}</dd>
+                <dd>
+                  <AssignOrganization
+                    reportId={report.id}
+                    organizationId={report.organizationId}
+                    organizationName={report.organization?.name ?? null}
+                    canAssign={canAssign}
+                  />
+                </dd>
                 <dt>Data zgłoszenia</dt>
                 <dd className="num">{formatDate(report.createdAt)}</dd>
                 <dt>Współrzędne</dt>

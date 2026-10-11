@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { boundaryFromGeoJson, parseBoundary } from "@/lib/geo";
 
 export const runtime = "nodejs";
 
@@ -22,6 +24,35 @@ export async function PATCH(
     const { organizationId } = await ctx.params;
     const payload = await request.json();
     const adminArea = String(payload.adminArea || "").trim();
+
+    // boundary: obiekt GeoJSON (z edytora), tekst GeoJSON do wklejenia,
+    // null albo brak pola (wtedy granica pozostaje bez zmian).
+    let boundaryUpdate: { boundary?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
+
+    if ("boundary" in payload) {
+      const input = payload.boundary as unknown;
+
+      if (input === null) {
+        boundaryUpdate = { boundary: Prisma.DbNull };
+      } else {
+        const parsed =
+          typeof input === "string" ? boundaryFromGeoJson(input) : parseBoundary(input);
+
+        if (parsed === null || "error" in parsed) {
+          return NextResponse.json(
+            {
+              error:
+                parsed && "error" in parsed
+                  ? parsed.error
+                  : "Niepoprawna granica — wymagany GeoJSON Polygon lub MultiPolygon.",
+            },
+            { status: 400 }
+          );
+        }
+
+        boundaryUpdate = { boundary: parsed as unknown as Prisma.InputJsonValue };
+      }
+    }
 
     const existing = await prisma.organization.findUnique({
       where: { id: organizationId },
@@ -47,6 +78,7 @@ export async function PATCH(
       where: { id: organizationId },
       data: {
         adminArea: adminArea || null,
+        ...boundaryUpdate,
       },
       include: {
         _count: {

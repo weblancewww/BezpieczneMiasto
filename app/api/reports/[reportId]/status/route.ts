@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendStatusUpdateEmail } from "@/lib/email";
+import { isWithinOrganizationScope } from "@/lib/org-scope";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,8 @@ export async function PATCH(
       select: {
         id: true,
         organizationId: true,
+        // Poprzedni status — mail pokazuje przejście „z → na".
+        status: true,
         reporterEmail: true,
         reporterName: true,
       },
@@ -47,8 +50,7 @@ export async function PATCH(
     }
 
     if (
-      session.user.role !== "SUPER_ADMIN" &&
-      existingReport.organizationId !== session.user.organizationId
+      !(await isWithinOrganizationScope(session.user, existingReport.organizationId))
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -80,13 +82,25 @@ export async function PATCH(
     });
 
     try {
-      await sendStatusUpdateEmail(
-        existingReport.reporterEmail,
-        existingReport.reporterName,
-        existingReport.id.substring(0, 8).toUpperCase(),
-        status,
-        note || undefined
-      );
+      await sendStatusUpdateEmail(updatedReport.reporterEmail, {
+        reportNumber: updatedReport.id.substring(0, 8).toUpperCase(),
+        reporterName: updatedReport.reporterName,
+        placeName:
+          updatedReport.reportPlaceName ||
+          updatedReport.location?.name ||
+          "Punkt zgłoszenia",
+        address: updatedReport.reportAddress || updatedReport.location?.address || null,
+        latitude: updatedReport.reportLatitude ?? updatedReport.location?.latitude ?? null,
+        longitude:
+          updatedReport.reportLongitude ?? updatedReport.location?.longitude ?? null,
+        description: updatedReport.description,
+        organizationName: updatedReport.organization?.name ?? null,
+        createdAt: updatedReport.createdAt,
+        photoCount: updatedReport.photos.length,
+        previousStatus: existingReport.status,
+        newStatus: updatedReport.status,
+        note: note || null,
+      });
     } catch (emailError) {
       console.error("Status update email failed:", emailError);
     }

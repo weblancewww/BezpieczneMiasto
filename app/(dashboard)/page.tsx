@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ChevronRight, FileText } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getOrganizationScopeIds } from "@/lib/org-scope";
 import { ReportsMap } from "@/components/map/reports-map";
 import type { ReportStatus } from "@/lib/utils";
 
@@ -24,9 +25,11 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
-  const reportWhere = isSuperAdmin ? {} : { organizationId: session.user.organizationId };
-  const locationWhere = isSuperAdmin ? {} : { organizationId: session.user.organizationId };
+  const scopeIds = await getOrganizationScopeIds(session.user);
+
+  // null = SUPER_ADMIN. Admin powiatu widzi też zgłoszenia i lokalizacje gmin.
+  const reportWhere = scopeIds ? { organizationId: { in: scopeIds } } : {};
+  const locationWhere = scopeIds ? { organizationId: { in: scopeIds } } : {};
 
   const [
     newCount,

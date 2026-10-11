@@ -6,12 +6,17 @@ import Image from "next/image";
 import { useMapsLibrary } from "@vis.gl/react-google-maps";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  findOrganizationForPoint,
+  parseBoundary,
+  type OrganizationBoundary,
+} from "@/lib/geo";
 
 type OrganizationItem = {
   id: string;
   name: string;
-  type: string;
-  adminArea: string | null;
+  type: "POWIAT" | "GMINA";
+  boundary: unknown;
 };
 
 type Props = {
@@ -21,14 +26,6 @@ type Props = {
   onClose: () => void;
   onReportCreated: () => void;
 };
-
-function normalizeStr(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-}
 
 // Stores the geocoding result along with the request coords so we can
 // detect stale results without synchronous setState calls in effects.
@@ -135,23 +132,28 @@ export function MapReportDialog({ open, lat, lng, onClose, onReportCreated }: Pr
   }, []);
 
   // Derive matched org name via useMemo (no extra effect needed).
+  // Podgląd przypisania liczymy tym samym algorytmem geometrii, którego używa
+  // serwer — dzięki temu to, co widzi użytkownik, zgadza się z zapisem.
   const matchedOrgName = useMemo<string | null>(() => {
-    if (geocodedAreas.length === 0 || organizations.length === 0) return null;
+    if (lat === null || lng === null || organizations.length === 0) return null;
 
-    const normAreas = geocodedAreas.map(normalizeStr);
+    const boundaries: OrganizationBoundary[] = organizations.flatMap((organization) => {
+      const boundary = parseBoundary(organization.boundary);
 
-    function matches(org: OrganizationItem): boolean {
-      if (!org.adminArea) return false;
-      const orgAreas = org.adminArea.split(",").map(normalizeStr);
-      return normAreas.some((ga) =>
-        orgAreas.some((oa) => oa.includes(ga) || ga.includes(oa))
-      );
-    }
+      if (!boundary) return [];
 
-    const gmina = organizations.find((o) => o.type === "GMINA" && matches(o));
-    const powiat = organizations.find((o) => o.type === "POWIAT" && matches(o));
-    return gmina?.name ?? powiat?.name ?? null;
-  }, [geocodedAreas, organizations]);
+      return [
+        {
+          id: organization.id,
+          name: organization.name,
+          type: organization.type,
+          boundary,
+        },
+      ];
+    });
+
+    return findOrganizationForPoint(boundaries, lat, lng)?.name ?? null;
+  }, [lat, lng, organizations]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -241,20 +243,21 @@ export function MapReportDialog({ open, lat, lng, onClose, onReportCreated }: Pr
               >
                 {isGeocoding ? (
                   <span className="hintline">Pobieranie adresu…</span>
-                ) : address ? (
+                ) : (
                   <>
-                    <div style={{ fontWeight: 600 }}>{address}</div>
+                    {address ? <div style={{ fontWeight: 600 }}>{address}</div> : null}
                     {matchedOrgName ? (
                       <div className="hintline" style={{ marginTop: 4 }}>
-                        Organizacja:{" "}
+                        Jednostka:{" "}
                         <strong style={{ color: "var(--accent)" }}>{matchedOrgName}</strong>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="hintline" style={{ marginTop: 4 }}>
+                        Punkt poza skonfigurowanymi granicami — zgłoszenie trafi do kolejki
+                        nieprzypisanych i przypisze je administrator.
+                      </div>
+                    )}
                   </>
-                ) : (
-                  <span className="hintline num">
-                    Współrzędne: {lat?.toFixed(6)}, {lng?.toFixed(6)}
-                  </span>
                 )}
               </div>
 

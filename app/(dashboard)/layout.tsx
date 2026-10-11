@@ -156,7 +156,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {sidebarOpen ? (
-        <div className="scrim open" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
+        <div
+          className="scrim nav-scrim open"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
       ) : null}
 
       <div className="main">

@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# lokalne materiały robocze / zrzuty do przeglądu
+*.zip
+.tmp-*
+dev-server*.log
+git-info.txt

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getOrganizationScopeIds } from "@/lib/org-scope";
 
 export const runtime = "nodejs";
 
@@ -19,11 +20,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const scopeIds = await getOrganizationScopeIds(session.user);
+
+    // Admin powiatu widzi też konta podległych gmin.
     const users = await prisma.user.findMany({
-      where:
-        session.user.role === "SUPER_ADMIN"
-          ? {}
-          : { organizationId: session.user.organizationId },
+      where: scopeIds ? { organizationId: { in: scopeIds } } : {},
       include: {
         organization: true,
       },

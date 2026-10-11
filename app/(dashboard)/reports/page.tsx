@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { reportStatusLabel, type ReportStatus } from "@/lib/utils";
@@ -16,11 +17,16 @@ type ReportRow = {
   createdAt: string;
   reportPlaceName: string | null;
   reportAddress: string | null;
+  organizationId: string | null;
+  assignedManually: boolean;
+  organization: { id: string; name: string } | null;
   location: {
     name: string;
     address: string;
   } | null;
 };
+
+type Filter = "ALL" | ReportStatus | "UNASSIGNED";
 
 const STATUS_ORDER: ReportStatus[] = ["NEW", "ANALYSIS", "IN_PROGRESS", "RESOLVED"];
 
@@ -42,28 +48,38 @@ function formatDate(value: string) {
 function ReportsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
 
   const [reports, setReports] = useState<ReportRow[]>([]);
+  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const query = searchParams.get("q") ?? "";
-  const statusFilter = (searchParams.get("status") as ReportStatus | null) ?? "ALL";
+  const statusFilter = (searchParams.get("status") as Filter | null) ?? "ALL";
 
   useEffect(() => {
     let active = true;
 
     async function bootstrap() {
       try {
-        const response = await fetch("/api/reports", { cache: "no-store" });
+        const [reportsResponse, organizationsResponse] = await Promise.all([
+          fetch("/api/reports", { cache: "no-store" }),
+          fetch("/api/organizations", { cache: "no-store" }),
+        ]);
 
-        if (!response.ok) {
+        if (!reportsResponse.ok) {
           throw new Error("Nie udało się pobrać zgłoszeń");
         }
 
-        const data = (await response.json()) as ReportRow[];
+        const data = (await reportsResponse.json()) as ReportRow[];
+        const orgData = organizationsResponse.ok
+          ? ((await organizationsResponse.json()) as { id: string; name: string }[])
+          : [];
 
         if (active) {
           setReports(data);
+          setOrganizations(orgData.map((org) => ({ id: org.id, name: org.name })));
         }
       } catch (error) {
         if (active) {
@@ -87,7 +103,11 @@ function ReportsContent() {
     const lowered = query.trim().toLowerCase();
 
     return reports.filter((report) => {
-      if (statusFilter !== "ALL" && report.status !== statusFilter) {
+      if (statusFilter === "UNASSIGNED") {
+        if (report.organizationId) {
+          return false;
+        }
+      } else if (statusFilter !== "ALL" && report.status !== statusFilter) {
         return false;
       }
 
@@ -117,7 +137,12 @@ function ReportsContent() {
     [reports]
   );
 
-  function setStatusFilter(next: "ALL" | ReportStatus) {
+  const unassignedCount = useMemo(
+    () => reports.filter((report) => !report.organizationId).length,
+    [reports]
+  );
+
+  function setStatusFilter(next: Filter) {
     const params = new URLSearchParams(searchParams.toString());
 
     if (next === "ALL") {
@@ -129,13 +154,49 @@ function ReportsContent() {
     router.replace(`/reports${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
-  const chips: { key: "ALL" | ReportStatus; label: string; count: number }[] = [
+  async function assignReport(reportId: string, organizationId: string) {
+    try {
+      const response = await fetch(`/api/reports/${reportId}/assign`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Nie udało się przypisać zgłoszenia");
+      }
+
+      setReports((current) =>
+        current.map((report) =>
+          report.id === reportId
+            ? {
+                ...report,
+                organizationId: result.report.organization.id,
+                organization: result.report.organization,
+                assignedManually: true,
+              }
+            : report
+        )
+      );
+
+      toast.success(`Zgłoszenie przypisane do ${result.report.organization.name}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Błąd przypisania");
+    }
+  }
+
+  const chips: { key: Filter; label: string; count: number }[] = [
     { key: "ALL", label: "Wszystkie", count: reports.length },
     ...STATUS_ORDER.map((status) => ({
-      key: status,
+      key: status as Filter,
       label: reportStatusLabel[status],
       count: counts[status] ?? 0,
     })),
+    ...(isSuperAdmin && unassignedCount > 0
+      ? [{ key: "UNASSIGNED" as Filter, label: "Nieprzypisane", count: unassignedCount }]
+      : []),
   ];
 
   return (
@@ -178,7 +239,7 @@ function ReportsContent() {
               <tr>
                 <th>Kod</th>
                 <th>Miejsce i opis</th>
-                <th>Zgłaszający</th>
+                <th>Jednostka</th>
                 <th>Data</th>
                 <th>Status</th>
                 <th aria-label="Akcje" />
@@ -194,11 +255,39 @@ function ReportsContent() {
                     </div>
                     <div className="t-sub">{report.description}</div>
                   </td>
-                  <td>
-                    <div className="t-main" style={{ fontWeight: 500 }}>
-                      {report.reporterName}
-                    </div>
-                    <div className="t-sub">{report.reporterPhone || report.reporterEmail}</div>
+                  <td onClick={(event) => event.stopPropagation()}>
+                    {report.organization ? (
+                      <>
+                        <span className="tag">{report.organization.name}</span>
+                        {report.assignedManually ? (
+                          <div className="t-sub">przypisane ręcznie</div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <span className="pill new">Nieprzypisane</span>
+                        {isSuperAdmin ? (
+                          <select
+                            className="select"
+                            style={{ marginTop: 8, height: 34, padding: "0 10px", fontSize: 12.5 }}
+                            defaultValue=""
+                            aria-label="Przypisz zgłoszenie do organizacji"
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              event.target.value = "";
+                              if (value) void assignReport(report.id, value);
+                            }}
+                          >
+                            <option value="">Przypisz do…</option>
+                            {organizations.map((organization) => (
+                              <option key={organization.id} value={organization.id}>
+                                {organization.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </>
+                    )}
                   </td>
                   <td className="num-col" style={{ textAlign: "left" }}>
                     {formatDate(report.createdAt)}

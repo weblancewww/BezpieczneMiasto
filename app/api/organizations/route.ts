@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+import { boundaryFromGeoJson, parseBoundary } from "@/lib/geo";
 
 export const runtime = "nodejs";
 
@@ -18,6 +21,11 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    /* Granice zwracamy raz na organizację. Wcześniejsze `include: { parent, children }`
+       doklejało pełne rekordy sąsiadów, więc granica powiatu (po imporcie z OSM
+       ~6900 wierzchołków) wracała jeszcze raz w `parent` i `children` każdej
+       gminy — odpowiedź rosła z ~190 KB do ponad 640 KB. Nikt z klientów nie
+       używa tych relacji (drzewo budują z `parentId`). */
     const organizations = await prisma.organization.findMany({
       where:
         session.user.role === "SUPER_ADMIN"
@@ -28,9 +36,17 @@ export async function GET() {
                 { parentId: session.user.organizationId },
               ],
             },
-      include: {
-        parent: true,
-        children: true,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        type: true,
+        description: true,
+        adminArea: true,
+        boundary: true,
+        parentId: true,
+        createdAt: true,
+        updatedAt: true,
         _count: {
           select: {
             users: true,
@@ -67,9 +83,34 @@ export async function POST(request: NextRequest) {
     const description = String(body.description || "").trim();
     const adminArea = String(body.adminArea || "").trim();
     const requestedParentId = String(body.parentId || "").trim();
+    const boundaryInput = body.boundary;
 
     if (!name || !slug || !isAllowedType(type)) {
       return NextResponse.json({ error: "Brak wymaganych danych organizacji" }, { status: 400 });
+    }
+
+    // Granica jest opcjonalna, ale jeśli podana — musi być poprawnym GeoJSON-em.
+    let boundary: Prisma.InputJsonValue | undefined;
+
+    if (boundaryInput !== undefined && boundaryInput !== null) {
+      const parsed =
+        typeof boundaryInput === "string"
+          ? boundaryFromGeoJson(boundaryInput)
+          : parseBoundary(boundaryInput);
+
+      if (parsed === null || "error" in parsed) {
+        return NextResponse.json(
+          {
+            error:
+              parsed && "error" in parsed
+                ? parsed.error
+                : "Niepoprawna granica — wymagany GeoJSON Polygon lub MultiPolygon.",
+          },
+          { status: 400 }
+        );
+      }
+
+      boundary = parsed as unknown as Prisma.InputJsonValue;
     }
 
     const existingSlug = await prisma.organization.findUnique({ where: { slug } });
@@ -98,11 +139,8 @@ export async function POST(request: NextRequest) {
         type,
         description: description || null,
         adminArea: adminArea || null,
+        boundary,
         parentId,
-      },
-      include: {
-        parent: true,
-        children: true,
       },
     });
 

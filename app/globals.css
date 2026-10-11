@@ -371,6 +371,23 @@ input, select, textarea { font: inherit; color: inherit; }
   content: ""; position: absolute; inset: -8px; border-radius: 50%;
   border: 2px solid var(--accent); opacity: .6; animation: cmPulse 2.4s ease-out infinite;
 }
+
+/* edytor granic organizacji (Terra Draw) */
+.boundary-editor { display: flex; flex-direction: column; gap: 10px; }
+.boundary-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px solid var(--hairline);
+  border-radius: var(--radius); background: var(--surface-2);
+}
+.boundary-toolbar .spacer { flex: 1; }
+.boundary-geojson {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; border: 1px solid var(--hairline);
+  border-radius: var(--radius); background: var(--surface-2);
+}
+.boundary-editor .map-picker,
+.boundary-editor > div > div[style] { border-radius: var(--radius-lg); }
+.boundary-editor .err { color: var(--danger); font-size: 12.5px; font-weight: 500; }
 .map-legend {
   position: absolute; left: 12px; bottom: 12px;
   background: color-mix(in oklch, var(--surface) 76%, transparent);
@@ -452,6 +469,8 @@ input, select, textarea { font: inherit; color: inherit; }
 /* ---------- drawer ---------- */
 .scrim { position: fixed; inset: 0; background: oklch(0% 0 0/.5); opacity: 0; pointer-events: none; transition: opacity .22s; z-index: 60; }
 .scrim.open { opacity: 1; pointer-events: auto; }
+/* scrim towarzyszący menu mobilnemu musi leżeć POD sidebarem */
+.scrim.nav-scrim { z-index: 45; }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%);
   background: var(--surface); border-left: 1px solid var(--hairline);
@@ -484,8 +503,8 @@ input, select, textarea { font: inherit; color: inherit; }
 /* ---------- modal ---------- */
 .modal { position: fixed; inset: 0; z-index: 80; display: none; place-items: center; padding: 24px; }
 .modal.open { display: grid; }
-.modal .scrim { position: absolute; inset: 0; opacity: 1; pointer-events: auto; }
-.modal-card { position: relative; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-xl); width: min(580px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+.modal .scrim { position: absolute; inset: 0; opacity: 1; pointer-events: auto; z-index: 0; }
+.modal-card { position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-xl); width: min(580px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
 .modal-card.wide { width: min(760px, 100%); }
 .modal-head { padding: 22px 24px; border-bottom: 1px solid var(--hairline); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .modal-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
@@ -620,12 +639,12 @@ hr.rule { border: 0; border-top: 1px solid var(--border); margin: 2px 0; }
 }
 .cm-public .hero-map { position: absolute; inset: 0; }
 .cm-public .hero-map img { width: 100%; height: 100%; object-fit: cover; }
-.cm-public .hero-map .scrim { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklch, var(--bg) 90%, transparent) 2%, color-mix(in oklch, var(--bg) 42%, transparent) 44%, transparent 80%); }
-.cm-public .hero-map .attrib { position: absolute; right: 8px; top: 8px; font-size: 8.5px; line-height: 1; color: color-mix(in oklch, var(--fg) 88%, transparent); background: color-mix(in oklch, var(--bg) 55%, transparent); padding: 3px 6px; border-radius: 999px; font-family: var(--font-mono); backdrop-filter: blur(4px); }
-.cm-public .hero-map .hpin { position: absolute; left: 55%; top: 44%; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid color-mix(in oklch, var(--fg) 92%, transparent); transform: translate(-50%, -50%); box-shadow: 0 2px 12px oklch(0% 0 0/.6); }
+.cm-public .hero-map .scrim { position: absolute; inset: 0; z-index: 0; background: linear-gradient(to top, color-mix(in oklch, var(--bg) 90%, transparent) 2%, color-mix(in oklch, var(--bg) 42%, transparent) 44%, transparent 80%); }
+.cm-public .hero-map .attrib { position: absolute; z-index: 1; right: 8px; top: 8px; font-size: 8.5px; line-height: 1; color: color-mix(in oklch, var(--fg) 88%, transparent); background: color-mix(in oklch, var(--bg) 55%, transparent); padding: 3px 6px; border-radius: 999px; font-family: var(--font-mono); backdrop-filter: blur(4px); }
+.cm-public .hero-map .hpin { position: absolute; z-index: 1; left: 55%; top: 44%; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid color-mix(in oklch, var(--fg) 92%, transparent); transform: translate(-50%, -50%); box-shadow: 0 2px 12px oklch(0% 0 0/.6); }
 .cm-public .hero-map .hpin::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--accent); opacity: .6; animation: cmPulse 2.4s ease-out infinite; }
 @keyframes cmPulse { 0% { transform: scale(.5); opacity: .6; } 100% { transform: scale(1.7); opacity: 0; } }
-.cm-public .hero-body { position: relative; padding: 18px; display: flex; flex-direction: column; gap: 9px; }
+.cm-public .hero-body { position: relative; z-index: 2; padding: 18px; display: flex; flex-direction: column; gap: 9px; }
 .cm-public .hero-body .hlab { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: color-mix(in oklch, var(--fg) 72%, transparent); }
 .cm-public .hero-body .hname { font-family: var(--font-display); font-size: 23px; font-weight: 600; letter-spacing: -0.022em; line-height: 1.1; }
 .cm-public .hero-chip { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; margin-top: 2px; font-size: 12.5px; font-weight: 550; color: var(--fg); background: color-mix(in oklch, var(--surface-2) 82%, transparent); border: 1px solid var(--hairline); padding: 6px 12px; border-radius: 999px; backdrop-filter: blur(6px); }
